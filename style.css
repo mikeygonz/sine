@@ -386,7 +386,7 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
   gap: 2px;
   padding-right: 3px;
-  transform-origin: var(--x, 50%) calc(100% + 5px);
+  transform-origin: 50% calc(100% + 5px);
   opacity: 0;
   transform: translateY(4px) scale(0.97);
   transition:

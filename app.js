@@ -1196,7 +1196,7 @@
   showTune();
 
   // ---------- sound hint, every visit ----------
-  // Once per device, while sound is off: a quiet note points at the speaker, then goes away for
+  // Once per device, while sound is off: a quiet note sits centered above the bar, then goes away for
   // good after 5 s, on any tap or key, or when sound is turned on.
   const hint = document.getElementById("hint"),
     hintTxt = document.getElementById("hint-t");
@@ -1210,13 +1210,8 @@
     if (!HINT_KEEP.includes(e.key)) hideHint();
   }
   function placeHint() {
-    const b = bar.getBoundingClientRect(),
-      s = snd.getBoundingClientRect(),
-      x = s.left + s.width / 2 - b.left,
-      w = hint.offsetWidth,
-      left = Math.max(0, Math.min(b.width - w, x - w / 2));
-    hint.style.left = left + "px";
-    hint.style.setProperty("--x", x - left + "px");
+    // centered over the bar, so it sits on the same axis as the prompt and the canvas
+    hint.style.left = Math.max(0, (bar.offsetWidth - hint.offsetWidth) / 2) + "px";
   }
   function hideHint() {
     clearTimeout(hintT);
