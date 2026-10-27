@@ -25,7 +25,7 @@ Every prompt spends the deployer's AI Gateway credits, so a public deploy lets a
 
 ## Share image
 
-`og.png` is a real frame of the app with the tagline. The `og:url` and image URLs in `index.html` point at `https://sine-preview.vercel.app`; change them to the real domain when Sine goes public.
+`og.png` is a real frame of the app with the tagline. Share tags in `index.html` use `https://sine.gonz.co`.
 
 ## Files
 

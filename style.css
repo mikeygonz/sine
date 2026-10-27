@@ -62,8 +62,31 @@ header {
   position: fixed;
   top: calc(20px + env(safe-area-inset-top));
   left: calc(24px + env(safe-area-inset-left));
-  right: 24px;
+  right: 64px; /* clear of the source link */
   pointer-events: none;
+}
+/* source link: a quiet 44px target aligned with the title */
+.gh {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--muted);
+  transition: color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.gh svg {
+  width: 18px;
+  height: 18px;
+}
+@media (hover: hover) {
+  .gh:hover {
+    color: var(--ink);
+  }
 }
 h1 {
   margin: 0;
