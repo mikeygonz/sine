@@ -23,10 +23,15 @@ The "Draw anything" box asks a model to sketch a prompt as one line. It runs as 
 
 Every prompt spends the deployer's AI Gateway credits, so a public deploy lets anyone spend yours. To turn it off, delete `api/`. The models are listed at the top of `api/draw.js`.
 
+## Share image
+
+`og.png` is a real frame of the app with the tagline. The `og:url` and image URLs in `index.html` point at `https://sine-preview.vercel.app`; change them to the real domain when Sine goes public.
+
 ## Files
 
 - `index.html`, `style.css`, `app.js`: the app
 - `api/`: the optional text-to-shape endpoint
+- `og.png`, `apple-touch-icon.png`: share image and icon
 - `fonts/`: Geist and Geist Mono, under the SIL Open Font License (`fonts/OFL.txt`)
 
 ## License
