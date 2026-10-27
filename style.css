@@ -92,18 +92,26 @@ header {
 .agent {
   right: calc(56px + env(safe-area-inset-right));
 }
+/* a stroked icon reads lighter than the solid GitHub mark: a touch larger and heavier to match */
+.agent svg {
+  width: 20px;
+  height: 20px;
+}
 .agent[aria-expanded="true"] {
   color: var(--ink);
 }
 .pop.connect {
   --row: 40px;
   position: fixed;
-  top: calc(56px + env(safe-area-inset-top));
+  top: var(--top, calc(56px + env(safe-area-inset-top))); /* set from the header's height in app.js */
   bottom: auto;
   left: auto;
   right: calc(12px + env(safe-area-inset-right));
   width: min(340px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)));
   padding: 4px;
+  background: var(--bg); /* opaque: the title and tagline must not show through */
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   transform-origin: calc(100% - 66px) 0;
 }
 .connect p {
@@ -121,15 +129,13 @@ header {
 .connect code {
   flex: 1;
   min-width: 0;
-  padding: 0 8px;
+  padding: 10px 8px;
   font:
-    13px/var(--row) "Geist Mono",
+    13px/20px "Geist Mono",
     ui-monospace,
     monospace;
   color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   -webkit-user-select: all;
   user-select: all;
 }

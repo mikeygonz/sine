@@ -1074,6 +1074,9 @@
     if (on) {
       openTuner(false);
       openShelf(false);
+      // below the title and tagline, however many lines the tagline wraps to
+      const top = Math.max(header.getBoundingClientRect().bottom, agentBtn.getBoundingClientRect().bottom);
+      connect.style.setProperty("--top", Math.round(top + 8) + "px");
     }
     connect.classList.toggle("open", on);
     agentBtn.setAttribute("aria-expanded", String(on));
