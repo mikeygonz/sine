@@ -21,7 +21,14 @@ The "Draw anything" box asks a model to sketch a prompt as one line. It runs as 
 - Deployed on Vercel, it uses the project's OIDC token automatically.
 - Anywhere else, set `AI_GATEWAY_API_KEY` and run `vercel dev`.
 
-Every prompt spends the deployer's AI Gateway credits, so a public deploy lets anyone spend yours. To turn it off, delete `api/`. The models are listed at the top of `api/draw.js`.
+Every prompt spends the deployer's AI Gateway credits, so a public deploy lets anyone spend yours. To turn it off, delete `api/draw.js`. The models are listed at the top of `api/draw.js`.
+
+## Connect your agent
+
+`api/mcp.js` is a small MCP server (Streamable HTTP, stateless) at `/api/mcp`. Add that URL to any MCP client and ask your agent to draw. The agent does the thinking on its own model; Sine only cleans up the line and spends nothing.
+
+- `draw_shape`: send one continuous line as `[x, y]` points or an SVG path. It returns a link like `/?s=CODE` that plays the drawing. The shape lives in the link, so there is no database.
+- `list_presets`: the built-in shapes, as `/?p=heart` links.
 
 ## Share image
 
@@ -30,7 +37,8 @@ Every prompt spends the deployer's AI Gateway credits, so a public deploy lets a
 ## Files
 
 - `index.html`, `style.css`, `app.js`: the app
-- `api/`: the optional text-to-shape endpoint
+- `api/draw.js`: the optional text-to-shape endpoint
+- `api/mcp.js`, `api/_shape.js`: the MCP server for your own agent
 - `og.png`, `apple-touch-icon.png`: share image and icon
 - `fonts/`: Geist and Geist Mono, under the SIL Open Font License (`fonts/OFL.txt`)
 

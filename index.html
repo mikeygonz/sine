@@ -45,6 +45,34 @@
         />
       </svg>
     </a>
+    <button
+      type="button"
+      class="gh agent"
+      id="agent"
+      aria-expanded="false"
+      aria-controls="connect"
+      aria-label="Connect your agent"
+      title="Connect your agent"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M9 3v5M15 3v5M6 8h12v4a6 6 0 0 1-12 0zM12 18v3" />
+      </svg>
+    </button>
+    <div class="pop connect" id="connect" role="group" aria-label="Connect your agent">
+      <p>Add Sine to your agent as an MCP server, then ask it to draw something.</p>
+      <div class="url">
+        <code id="mcp"></code>
+        <button type="button" class="save" id="copy">Copy</button>
+      </div>
+    </div>
     <div class="bar" role="toolbar" aria-label="Controls">
       <form class="ask" id="ask" autocomplete="off" hidden>
         <input

@@ -62,7 +62,7 @@ header {
   position: fixed;
   top: calc(20px + env(safe-area-inset-top));
   left: calc(24px + env(safe-area-inset-left));
-  right: 64px; /* clear of the source link */
+  right: 108px; /* clear of the agent and source links */
   pointer-events: none;
 }
 /* source link: a quiet 44px target aligned with the title */
@@ -87,6 +87,54 @@ header {
   .gh:hover {
     color: var(--ink);
   }
+}
+/* connect your agent: sits left of the source link, opens a panel under both */
+.agent {
+  right: calc(56px + env(safe-area-inset-right));
+}
+.agent[aria-expanded="true"] {
+  color: var(--ink);
+}
+.pop.connect {
+  --row: 40px;
+  position: fixed;
+  top: calc(56px + env(safe-area-inset-top));
+  bottom: auto;
+  left: auto;
+  right: calc(12px + env(safe-area-inset-right));
+  width: min(340px, calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  padding: 4px;
+  transform-origin: calc(100% - 66px) 0;
+}
+.connect p {
+  margin: 0;
+  padding: 8px 8px 6px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.connect .url {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.connect code {
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px;
+  font:
+    13px/var(--row) "Geist Mono",
+    ui-monospace,
+    monospace;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-user-select: all;
+  user-select: all;
+}
+.connect .save {
+  min-width: 72px;
 }
 h1 {
   margin: 0;
@@ -643,6 +691,9 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     width: calc(100% + 2px);
   }
   .shelf {
+    --row: 44px;
+  }
+  .pop.connect {
     --row: 44px;
   }
 }

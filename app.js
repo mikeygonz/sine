@@ -678,6 +678,7 @@
   function openShelf(on) {
     if (on) {
       openTuner(false);
+      openConnect(false);
       const b = bar.getBoundingClientRect(),
         s = savedBtn.getBoundingClientRect();
       shelf.style.transformOrigin = `${s.left + s.width / 2 - b.left}px 100%`;
@@ -1029,7 +1030,10 @@
     expand.textContent = on ? "Less" : "More";
   }
   function openTuner(on) {
-    if (on) openShelf(false);
+    if (on) {
+      openShelf(false);
+      openConnect(false);
+    }
     tuner.classList.toggle("open", on);
     tuneBtn.setAttribute("aria-expanded", String(on));
     if (!on) fullTuner(false);
@@ -1060,9 +1064,38 @@
       applyTune("all");
     } else if (e.target.closest(".expand")) fullTuner(!tuner.classList.contains("full"));
   });
+  // ---------- connect your agent: the MCP address to copy (api/mcp.js) ----------
+  const agentBtn = document.getElementById("agent"),
+    connect = document.getElementById("connect"),
+    copyBtn = document.getElementById("copy"),
+    mcpEl = document.getElementById("mcp");
+  mcpEl.textContent = location.origin + "/api/mcp";
+  function openConnect(on) {
+    if (on) {
+      openTuner(false);
+      openShelf(false);
+    }
+    connect.classList.toggle("open", on);
+    agentBtn.setAttribute("aria-expanded", String(on));
+  }
+  agentBtn.addEventListener("click", () => openConnect(!connect.classList.contains("open")));
+  copyBtn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(mcpEl.textContent);
+      copyBtn.textContent = "Copied";
+    } catch (_) {
+      getSelection().selectAllChildren(mcpEl); // no clipboard access: select it to copy by hand
+      return;
+    }
+    clearTimeout(copyBtn.t);
+    copyBtn.t = setTimeout(() => (copyBtn.textContent = "Copy"), 1600);
+  });
   addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (tuner.classList.contains("open")) {
+    if (connect.classList.contains("open")) {
+      openConnect(false);
+      agentBtn.focus();
+    } else if (tuner.classList.contains("open")) {
       openTuner(false);
       tuneBtn.focus();
     } else if (shelf.classList.contains("open")) {
@@ -1078,10 +1111,13 @@
         ? [tuner, tuneBtn]
         : shelf.classList.contains("open")
           ? [shelf, savedBtn]
-          : null;
+          : connect.classList.contains("open")
+            ? [connect, agentBtn]
+            : null;
       if (!open || open.some((el) => el.contains(e.target))) return;
       openTuner(false);
       openShelf(false);
+      openConnect(false);
       if (e.target === cv) {
         e.stopPropagation();
         e.preventDefault();
@@ -1107,10 +1143,64 @@
       ask.hidden = !(v && v.ok);
       start();
     });
+  // ---------- links: /?p=heart plays a preset, /?s=CODE plays a shape an agent drew (api/mcp.js) ----------
+  // CODE is base64url of [1, count, then zigzag varint deltas of x and y on a 1000 box].
+  function unpack(code) {
+    const b = atob(code.replace(/-/g, "+").replace(/_/g, "/"));
+    let i = 0;
+    const varint = () => {
+      let v = 0,
+        sh = 0,
+        c;
+      do {
+        if (i >= b.length || sh > 28) throw 0;
+        c = b.charCodeAt(i++);
+        v |= (c & 0x7f) << sh;
+        sh += 7;
+      } while (c & 0x80);
+      return v >>> 0;
+    };
+    const zz = (v) => (v & 1 ? -(v + 1) / 2 : v / 2);
+    if (varint() !== 1) throw 0;
+    const n = varint(),
+      pts = [];
+    if (n < 3 || n > 2000) throw 0;
+    let x = 0,
+      y = 0;
+    for (let k = 0; k < n; k++) {
+      x += zz(varint());
+      y += zz(varint());
+      pts.push([x, y]);
+    }
+    return pts;
+  }
+  function fromLink() {
+    const qs = new URLSearchParams(location.search),
+      p = qs.get("p");
+    if (p && SHAPES[p]) {
+      pick(p);
+      load(SHAPES[p](), { fresh: true });
+      return true;
+    }
+    let pts;
+    try {
+      pts = unpack(qs.get("s") || "");
+    } catch (_) {
+      return false;
+    }
+    pick("yours");
+    const n = +qs.get("n"),
+      i = steps.indexOf(steps.includes(n) ? n : DRAW_N);
+    N = steps[i];
+    slider.value = String(i);
+    load(normalize(resample(pts, M)).pts, { fresh: true });
+    drew(pts, (qs.get("t") || "").trim().slice(0, 40) || "Drawing");
+    return true;
+  }
   function start() {
     layout();
     slider.style.setProperty("--p", "0%");
-    load(SHAPES.star(), { fresh: true });
+    if (!fromLink()) load(SHAPES.star(), { fresh: true });
     renderShelf();
     let last = performance.now();
     function loop(now) {
