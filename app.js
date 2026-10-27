@@ -229,6 +229,7 @@
   let morphDur = 700;
   function pick(name) {
     shapeName = name;
+    cueOff();
     segBtns.forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.s === name)));
     custom = null;
     showing = null;
@@ -319,8 +320,45 @@
     ARMS = 160;
   let stroke = null,
     cursor = null;
+  // "Draw here": on first load, a faint pen loops beside the words under the shape, until the
+  // first stroke, preset, saved shape or prompt. Reduced motion shows the words alone.
+  let cueOn = true,
+    cueA = 0;
+  const cueOff = () => (cueOn = false);
+  function cue() {
+    const { R, cx, cy } = L;
+    const y = Math.min(cy + R * 0.82 + 34, bar.getBoundingClientRect().top - 24); // just under the star
+    ctx.font = "13px Geist, ui-sans-serif, system-ui, sans-serif";
+    ctx.textBaseline = "middle";
+    const tw = ctx.measureText("Draw here").width,
+      lw = RM ? 0 : 30,
+      x0 = cx - (lw + tw) / 2;
+    ctx.fillStyle = `rgba(115,115,115,${cueA})`;
+    ctx.fillText("Draw here", x0 + lw, y);
+    if (RM) return;
+    // a figure eight, with a tail that fades behind the pen
+    const th = (clock / 2400) * TAU,
+      px = (a) => x0 + 10 + 10 * Math.sin(a),
+      py = (a) => y + 5 * Math.sin(2 * a),
+      K = 28;
+    ctx.lineWidth = 1.5;
+    for (let k = 0; k < K; k++) {
+      const a = th - (k / K) * 3.6,
+        b = th - ((k + 1) / K) * 3.6;
+      ctx.strokeStyle = `rgba(115,115,115,${cueA * 0.55 * (1 - k / K)})`;
+      ctx.beginPath();
+      ctx.moveTo(px(a), py(a));
+      ctx.lineTo(px(b), py(b));
+      ctx.stroke();
+    }
+    ctx.fillStyle = `rgba(115,115,115,${cueA})`;
+    ctx.beginPath();
+    ctx.arc(px(th), py(th), 2.5, 0, TAU);
+    ctx.fill();
+  }
   function frame(dt) {
     clock += dt;
+    cueA = cueOn && clock > 400 ? Math.min(1, cueA + dt / 500) : cueOn ? 0 : Math.max(0, cueA - dt / 200);
     if (!RM) t = (t + dt / period) % 1;
     let moving = false;
     if (morph < 1) {
@@ -353,6 +391,7 @@
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     const { R, cx, cy, w0, w1, wy, A, side } = L;
+    if (cueA > 0) cue();
     if (stroke) {
       ctx.strokeStyle = `rgb(${INK})`;
       ctx.lineWidth = 2;
@@ -493,6 +532,7 @@
   let pid = null;
   cv.addEventListener("pointerdown", (e) => {
     if (pid !== null) return;
+    cueOff();
     pid = e.pointerId;
     cv.setPointerCapture(pid);
     stroke = [[e.clientX, e.clientY]];
@@ -551,6 +591,7 @@
   });
   const PT = /^\s*(\d{1,4})\s*,\s*(\d{1,4})\s*$/;
   function promptStart(text) {
+    cueOff();
     custom = null;
     renderShelf();
     live = { id: ++job, buf: "", pts: [], last: 0, text, fresh: true };
