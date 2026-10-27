@@ -1,0 +1,8 @@
+{
+  "name": "sine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Any shape is spinning circles. Draw one.",
+  "license": "MIT",
+  "type": "module"
+}
