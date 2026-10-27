@@ -960,15 +960,65 @@
     }
     voice = { o, g };
   }
+  // iPhone: play even with the silent switch on. Safari 17+ has audioSession; older ones need a
+  // looping silent <audio> playing too, which moves the page into the playback category.
+  let hush = null;
+  function silence() {
+    // 0.1 s of 8-bit mono silence at 8 kHz, as a WAV
+    const n = 800,
+      v = new DataView(new ArrayBuffer(44 + n)),
+      s = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    s(0, "RIFF");
+    v.setUint32(4, 36 + n, true);
+    s(8, "WAVEfmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true);
+    v.setUint32(28, 8000, true);
+    v.setUint16(32, 1, true);
+    v.setUint16(34, 8, true);
+    s(36, "data");
+    v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+    return URL.createObjectURL(new Blob([v], { type: "audio/wav" }));
+  }
+  function playThrough(on) {
+    if (navigator.audioSession) {
+      if (on) navigator.audioSession.type = "playback";
+      return;
+    }
+    if (!("ontouchend" in document)) return;
+    if (!hush) {
+      hush = new Audio(silence());
+      hush.loop = true;
+      hush.setAttribute("playsinline", "");
+    }
+    if (on) hush.play().catch(() => {});
+    else hush.pause();
+  }
+  const soundOn = () => snd.getAttribute("aria-pressed") === "true";
+  // A lock, an app switch or a call suspends the context (on iPhone, "interrupted"). Resume it on
+  // the way back, and on the next tap if the browser wants a gesture, so sound that is on stays on.
+  function wake() {
+    if (!ac || !soundOn() || document.hidden) return;
+    if (hush && hush.paused) hush.play().catch(() => {});
+    if (ac.state !== "running") ac.resume().catch(() => {});
+  }
+  for (const e of ["pointerdown", "touchend", "keydown"]) addEventListener(e, wake, { capture: true, passive: true });
+  document.addEventListener("visibilitychange", wake);
+  addEventListener("pageshow", wake);
   snd.addEventListener("click", () => {
     const on = snd.getAttribute("aria-pressed") !== "true";
     snd.setAttribute("aria-pressed", String(on));
     tuneBtn.disabled = !on;
     if (!on) openTuner(false);
+    playThrough(on);
     if (on) {
       if (!ac) {
         const AC = window.AudioContext || window.webkitAudioContext;
         ac = new AC();
+        ac.onstatechange = wake;
         pan = ac.createStereoPanner();
         master = chain(ac, pan);
         bend = ac.createConstantSource();
@@ -985,10 +1035,11 @@
         lastUpd = 0;
         audioUpdate();
       }
-      ac.resume();
+      ac.resume().catch(() => {});
       const n = ac.currentTime;
       master.gain.cancelScheduledValues(n);
       master.gain.setTargetAtTime(level(), n, 0.08);
+      if (tune.notes === "pluck") strike(env.gain, n); // a note right away, so on sounds on
     } else if (ac) {
       const n = ac.currentTime;
       master.gain.cancelScheduledValues(n);
