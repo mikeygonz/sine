@@ -2,10 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#fafafa" />
     <title>Sine</title>
     <link rel="stylesheet" href="style.css" />
@@ -48,6 +45,14 @@
           <button type="button" data-s="heart" aria-pressed="false">Heart</button>
           <button type="button" data-s="square" aria-pressed="false">Square</button>
           <button type="button" id="saved" aria-expanded="false" aria-controls="shelf">Saved</button>
+        </div>
+        <div class="pop shelf" id="shelf" role="group" aria-label="Saved shapes">
+          <form class="keep" id="keep" autocomplete="off" hidden>
+            <input id="name" type="text" maxlength="40" enterkeyhint="done" aria-label="Name" />
+            <button type="submit" class="save">Save</button>
+          </form>
+          <p class="none" id="none" hidden>Draw a shape to save it here.</p>
+          <ul class="list" id="list"></ul>
         </div>
         <button type="button" class="snd" id="snd" aria-pressed="false" aria-label="Sound">
           <svg
@@ -107,14 +112,6 @@
           <input id="n" type="range" min="0" max="19" step="1" value="4" aria-label="Waves" />
           <span class="out" id="out" aria-hidden="true"></span>
         </div>
-      </div>
-      <div class="pop shelf" id="shelf" role="group" aria-label="Saved shapes">
-        <form class="keep" id="keep" autocomplete="off" hidden>
-          <input id="name" type="text" maxlength="40" enterkeyhint="done" aria-label="Name" />
-          <button type="submit" class="save">Save</button>
-        </form>
-        <p class="none" id="none" hidden>Draw a shape to save it here.</p>
-        <ul class="list" id="list"></ul>
       </div>
       <div class="pop tuner" id="tuner" role="group" aria-label="Sound">
         <div class="t">

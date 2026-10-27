@@ -497,7 +497,7 @@
     const nz = normalize(resample(s, M));
     pick("yours");
     load(nz.pts, { fresh: true, raw: { cx: nz.cx, cy: nz.cy, r: nz.r } });
-    drew(s, `Drawing ${shapes.length + 1}`);
+    drew(s, "Drawing");
   }
   cv.addEventListener("pointerup", end);
   cv.addEventListener("pointercancel", end);
@@ -639,8 +639,16 @@
       return false;
     }
   }
+  // a default name no saved shape has yet: "Drawing 3", or "a cat 2" for a repeated prompt
+  function fresh(base) {
+    const taken = new Set(shapes.map((x) => x.name));
+    let n = base === "Drawing" ? shapes.length + 1 : 1;
+    const at = (k) => (base === "Drawing" || k > 1 ? `${base} ${k}` : base);
+    while (taken.has(at(n))) n++;
+    return at(n);
+  }
   function drew(pts, name) {
-    custom = { pts: pts.slice(), name };
+    custom = { pts: pts.slice(), name: fresh(name) };
     renderShelf();
   }
   function thumb(pts) {
@@ -656,12 +664,13 @@
   function renderShelf() {
     keep.hidden = !custom;
     if (custom && document.activeElement !== nameEl) nameEl.value = custom.name;
+    noneEl.textContent = "Draw a shape to save it here.";
     noneEl.hidden = !!custom || shapes.length > 0;
     listEl.innerHTML = shapes
       .map(
         (x) =>
           `<li><button type="button" class="item" data-id="${x.id}" aria-current="${x.id === showing}">${thumb(x.pts)}<span>${esc(x.name)}</span></button>` +
-          `<button type="button" class="del" data-id="${x.id}" aria-label="Delete ${esc(x.name)}">${X}</button></li>`,
+          `<button type="button" class="del" data-id="${x.id}" aria-label="Delete ${esc(x.name)}">${X}<span class="confirm" aria-hidden="true">Confirm delete</span></button></li>`,
       )
       .join("");
     savedBtn.classList.toggle("on", showing !== null);
@@ -697,10 +706,10 @@
       noneEl.hidden = false;
       return;
     }
-    nameEl.blur();
     custom = null;
     showing = x.id;
     renderShelf();
+    listEl.querySelector(".item").focus(); // focus follows the shape you just saved
   });
   listEl.addEventListener("click", (e) => {
     const del = e.target.closest(".del"),
@@ -710,15 +719,20 @@
       if (!del.classList.contains("armed")) {
         for (const d of listEl.querySelectorAll(".armed")) disarm(d);
         del.classList.add("armed");
-        del.textContent = "Delete";
+        del.dataset.label = del.getAttribute("aria-label");
+        del.setAttribute("aria-label", "Confirm delete");
         clearTimeout(del.t);
         del.t = setTimeout(() => disarm(del), 2500);
         return;
       }
-      shapes = shapes.filter((x) => x.id !== del.dataset.id);
+      const i = shapes.findIndex((x) => x.id === del.dataset.id);
+      shapes.splice(i, 1);
       persist();
       if (showing === del.dataset.id) showing = null;
       renderShelf();
+      // focus moves to the row that took its place, else the one above, else back to Saved
+      const rows = listEl.querySelectorAll(".item");
+      (rows[Math.min(i, rows.length - 1)] || (keep.hidden ? savedBtn : nameEl)).focus();
     } else if (item) {
       const x = shapes.find((x) => x.id === item.dataset.id);
       if (!x) return;
@@ -735,10 +749,15 @@
     }
   });
   function disarm(d) {
-    if (!d.isConnected) return;
+    if (!d.classList.contains("armed")) return;
+    clearTimeout(d.t);
     d.classList.remove("armed");
-    d.innerHTML = X;
+    d.setAttribute("aria-label", d.dataset.label);
   }
+  listEl.addEventListener("focusout", (e) => {
+    const d = e.target.closest(".del");
+    if (d) disarm(d);
+  });
 
   // ---------- sound ----------
   // The tone is the wave on screen: the y (side layout) or x (stacked layout) component of the

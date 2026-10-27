@@ -21,7 +21,7 @@ The "Draw anything" box asks a model to sketch a prompt as one line. It runs as 
 - Deployed on Vercel, it uses the project's OIDC token automatically.
 - Anywhere else, set `AI_GATEWAY_API_KEY` and run `vercel dev`.
 
-Model calls are billed to your gateway account. The models are listed at the top of `api/draw.js`.
+Every prompt spends the deployer's AI Gateway credits, so a public deploy lets anyone spend yours. To turn it off, delete `api/`. The models are listed at the top of `api/draw.js`.
 
 ## Files
 
