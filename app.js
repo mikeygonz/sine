@@ -1238,7 +1238,7 @@
   function placeHint() {
     // floats out of the layout, flush with the prompt's right edge and 8px above it, over empty canvas; with
     // no prompt on this deploy it sits above the controls instead. No caret: the prompt sits between the
-    // note and the sound button, so one would point through the input. The button's ring ties them.
+    // note and the sound button, so one would point through the input. The button's gray fill ties them.
     const b = bar.getBoundingClientRect(),
       top = (ask.hidden ? bar.querySelector(".row") : ask).getBoundingClientRect().top;
     hint.style.left = Math.max(0, b.width - hint.offsetWidth) + "px";
