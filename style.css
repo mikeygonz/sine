@@ -194,8 +194,8 @@ header p {
   align-items: center;
   gap: 4px;
 }
-/* the shape row: presets, then saved shapes. It scrolls sideways with no bar, and a blur and fade
-   hide the edge where it runs off. */
+/* the shape row: presets, then saved shapes. It scrolls sideways with no bar, and a fade hides the
+   edge where it runs off. */
 .strip {
   position: relative;
   min-width: 0;
@@ -211,32 +211,18 @@ header p {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s;
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
 }
-/* eased stops, so neither the blur nor the fade shows an inner edge */
+/* eased stops, so the fade shows no inner edge */
 .strip::before {
   left: 0;
   background: linear-gradient(
     to right,
     rgb(250, 250, 250) 0,
-    rgba(250, 250, 250, 0.74) 25%,
-    rgba(250, 250, 250, 0.3) 60%,
+    rgba(250, 250, 250, 0.87) 16%,
+    rgba(250, 250, 250, 0.6) 36%,
+    rgba(250, 250, 250, 0.3) 58%,
+    rgba(250, 250, 250, 0.1) 80%,
     rgba(250, 250, 250, 0) 100%
-  );
-  -webkit-mask-image: linear-gradient(
-    to right,
-    #000 0,
-    rgba(0, 0, 0, 0.74) 25%,
-    rgba(0, 0, 0, 0.3) 60%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to right,
-    #000 0,
-    rgba(0, 0, 0, 0.74) 25%,
-    rgba(0, 0, 0, 0.3) 60%,
-    transparent 100%
   );
 }
 .strip::after {
@@ -244,34 +230,12 @@ header p {
   background: linear-gradient(
     to left,
     rgb(250, 250, 250) 0,
-    rgba(250, 250, 250, 0.74) 25%,
-    rgba(250, 250, 250, 0.3) 60%,
+    rgba(250, 250, 250, 0.87) 16%,
+    rgba(250, 250, 250, 0.6) 36%,
+    rgba(250, 250, 250, 0.3) 58%,
+    rgba(250, 250, 250, 0.1) 80%,
     rgba(250, 250, 250, 0) 100%
   );
-  -webkit-mask-image: linear-gradient(
-    to left,
-    #000 0,
-    rgba(0, 0, 0, 0.74) 25%,
-    rgba(0, 0, 0, 0.3) 60%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to left,
-    #000 0,
-    rgba(0, 0, 0, 0.74) 25%,
-    rgba(0, 0, 0, 0.3) 60%,
-    transparent 100%
-  );
-}
-/* Safari bands the masked blur, so it gets the fade alone */
-@supports (-webkit-hyphens: none) {
-  .strip::before,
-  .strip::after {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
 }
 .strip.l::before,
 .strip.r::after {
