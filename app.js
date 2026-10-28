@@ -1193,12 +1193,14 @@
   showTune();
 
   // ---------- sound hint, every visit ----------
-  // Once per device, while sound is off: a quiet note sits centered above the bar, then goes away for
-  // good after 5 s, on any tap or key, or when sound is turned on.
+  // Once per visit, while sound is off: a quiet note sits centered above the bar, then goes away for
+  // good after 5 s, on any tap or key, or when sound is turned on. The 5 s only counts down while the
+  // mouse is off the note and the sound button and focus is not on the x: hovering holds it open.
   const hint = document.getElementById("hint"),
     hintTxt = document.getElementById("hint-t");
   document.getElementById("hint-x").addEventListener("click", hideHint);
-  let hintT = 0;
+  let hintT = 0,
+    hintHeld = 0; // pointers over the note or the sound button, plus focus on the x
   let done = false; // per visit only: it comes back on every page load
   const seen = () => done;
   // Tab and modifiers move focus to the x without closing the hint; Escape and other keys close it
@@ -1210,8 +1212,23 @@
     // centered over the bar, so it sits on the same axis as the prompt and the canvas
     hint.style.left = Math.max(0, (bar.offsetWidth - hint.offsetWidth) / 2) + "px";
   }
+  function hintCount() {
+    clearTimeout(hintT);
+    if (!done && !hintHeld) hintT = setTimeout(hideHint, 5000);
+  }
+  function hintHold(on) {
+    hintHeld = Math.max(0, hintHeld + (on ? 1 : -1));
+    hintCount();
+  }
+  for (const el of [hint, snd]) {
+    el.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && hintHold(true));
+    el.addEventListener("pointerleave", (e) => e.pointerType === "mouse" && hintHold(false));
+  }
+  hint.addEventListener("focusin", () => hintHold(true));
+  hint.addEventListener("focusout", () => hintHold(false));
   function hideHint() {
     clearTimeout(hintT);
+    hintHeld = 0;
     removeEventListener("pointerdown", hideHint, true);
     removeEventListener("keydown", hintKey, true);
     removeEventListener("resize", placeHint);
@@ -1240,7 +1257,8 @@
     addEventListener("pointerdown", hideHint, true);
     addEventListener("keydown", hintKey, true);
     addEventListener("resize", placeHint);
-    hintT = setTimeout(hideHint, 5000);
+    hintHeld = (snd.matches(":hover") ? 1 : 0) + (hint.matches(":hover") ? 1 : 0);
+    hintCount();
   }
   snd.addEventListener("click", () => {
     if (snd.getAttribute("aria-pressed") === "true" && !seen()) hideHint();

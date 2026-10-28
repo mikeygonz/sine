@@ -450,8 +450,9 @@ input[type="range"]::-moz-range-thumb {
   padding: 7px 11px;
   font-size: 13px;
   line-height: 18px;
+  font-weight: 400;
   white-space: nowrap;
-  color: var(--ink);
+  color: var(--muted); /* same color as the "Draw here" hint on the canvas */
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -486,14 +487,13 @@ input[type="range"]::-moz-range-thumb {
   border: 0;
   border-radius: 6px;
   background: none;
-  color: var(--ink);
-  opacity: 0.45;
+  color: inherit;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: color 0.15s;
 }
 .hint-x:hover,
 .hint-x:focus-visible {
-  opacity: 0.9;
+  color: var(--ink);
 }
 .snd.hinted {
   background: var(--chip);
