@@ -4,5 +4,11 @@
   "private": true,
   "description": "A Fourier series drawing toy.",
   "license": "MIT",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "botid": "1.5.12"
+  },
+  "scripts": {
+    "vendor:botid": "(echo '// the botid client (MIT, botid 1.5.12) with process.env.NODE_ENV fixed to production; made by npm run vendor:botid'; sed 's/process\\.env\\.NODE_ENV/\"production\"/' node_modules/botid/dist/client/core/index.mjs) > botid.js"
+  }
 }

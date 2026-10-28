@@ -18,7 +18,10 @@
   const ask = document.getElementById("ask"),
     q = document.getElementById("q"),
     go = document.getElementById("go"),
-    statusEl = document.getElementById("status");
+    statusEl = document.getElementById("status"),
+    keyBox = document.getElementById("key"),
+    keyT = document.getElementById("key-t"),
+    keyIn = document.getElementById("gk");
   const rmq = matchMedia("(prefers-reduced-motion: reduce)");
   let RM = rmq.matches;
   rmq.addEventListener &&
@@ -608,6 +611,55 @@
   });
 
   // ---------- prompt: stream points from /api/draw and morph as they arrive ----------
+  // Free tries are counted on the server by IP. After the free ones, the visitor pastes their own AI Gateway
+  // key. It is kept in sessionStorage: it survives a reload of this tab but is gone when the tab closes, is
+  // never shared across tabs, and is never written to localStorage. It is sent only to /api/draw, as a header.
+  const KEY_RE = /^vck_[A-Za-z0-9_-]{20,200}$/,
+    KEY_SLOT = "sine-gateway-key";
+  let free = null, // tries left on the server, or null if unknown
+    own = "";
+  try {
+    own = sessionStorage.getItem(KEY_SLOT) || "";
+    if (!KEY_RE.test(own)) own = "";
+  } catch (_) {}
+  function setOwn(v) {
+    own = v;
+    try {
+      v ? sessionStorage.setItem(KEY_SLOT, v) : sessionStorage.removeItem(KEY_SLOT);
+    } catch (_) {}
+  }
+  const freeLabel = () => (own ? "your key" : free === null ? "" : free + " free");
+  function keyOpen(text) {
+    keyT.textContent = text;
+    keyBox.hidden = false;
+    hideHint(); // the sound note floats in the same spot
+  }
+  const keyShut = () => (keyBox.hidden = true);
+  document.getElementById("key-x").addEventListener("click", () => {
+    keyShut();
+    q.focus();
+  });
+  cv.addEventListener("pointerdown", keyShut);
+  addEventListener("keydown", (e) => e.key === "Escape" && !keyBox.hidden && keyShut());
+  function keyTake() {
+    const v = keyIn.value.trim();
+    if (!KEY_RE.test(v)) return false;
+    setOwn(v);
+    keyIn.value = "";
+    keyShut();
+    status(freeLabel());
+    if (q.value.trim() && !live) ask.requestSubmit();
+    else q.focus();
+    return true;
+  }
+  keyIn.addEventListener("paste", () => setTimeout(keyTake)); // a typed key is taken on Enter, not mid-word
+  keyIn.addEventListener("change", keyTake);
+  keyIn.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (!keyTake()) keyT.textContent = "That is not a gateway key. It starts with vck_.";
+  });
+  const OUT = "You used your 3 free tries. Paste your own Vercel AI Gateway key to keep drawing.";
   let job = 0,
     live = null;
   function status(text, busy) {
@@ -667,11 +719,13 @@
     if (live.buf) promptFeed("\n");
     if (ok) {
       apply(true);
-      status("");
-    } else status(err === "limit" ? "too many, try later" : "couldn’t draw that");
-    if (!ok)
+      status(freeLabel());
+      if (!own && free === 0) keyOpen("That was your last free try. Paste your own Vercel AI Gateway key to keep drawing.");
+    } else if (err === "gate") status(freeLabel());
+    else status(err === "limit" ? "too many, try later" : err === "bot" ? "blocked" : "couldn’t draw that");
+    if (!ok && err !== "gate")
       setTimeout(() => {
-        if (!live) status("");
+        if (!live) status(freeLabel());
       }, err === "limit" ? 5000 : 3200);
     live = null;
     go.disabled = !q.value.trim();
@@ -686,13 +740,31 @@
     try {
       const r = await fetch("/api/draw", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(own && { "x-gateway-key": own }) },
         body: JSON.stringify({ prompt: text }),
       });
       if (!r.ok || !r.body) {
-        promptEnd(r.status === 429 ? "limit" : "fail");
+        const code = ((await r.json().catch(() => null)) || {}).code;
+        if (id !== job) return;
+        if (code === "tries") free = 0;
+        if (own && code === "key") {
+          setOwn("");
+          keyOpen("That key did not work. Check it and paste it again.");
+          promptEnd("gate");
+        } else if (code === "tries") {
+          keyOpen(OUT);
+          promptEnd("gate");
+        } else if (code === "cap" || code === "paused") {
+          keyOpen(
+            (code === "cap" ? "Free drawing is full for today." : "Free drawing is paused.") +
+              " Paste your own Vercel AI Gateway key to draw now.",
+          );
+          promptEnd("gate");
+        } else promptEnd(code === "burst" || r.status === 429 ? "limit" : code === "bot" ? "bot" : "fail");
         return;
       }
+      const left = r.headers.get("x-free-left");
+      if (left !== null && !own) free = +left;
       const rd = r.body.getReader(),
         dec = new TextDecoder();
       while (true) {
@@ -1340,6 +1412,11 @@
     .catch(() => null)
     .then((v) => {
       ask.hidden = !(v && v.ok);
+      if (v && v.ok && v.free && typeof v.free.left === "number") free = v.free.left;
+      if (!ask.hidden && !own && free === 0) {
+        status(freeLabel());
+        keyOpen(OUT);
+      }
       start();
     });
   function start() {

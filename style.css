@@ -149,6 +149,68 @@ header p {
   outline: none;
   background: var(--chip);
 }
+/* out of free tries: a panel floating 8px above the prompt, out of the layout, so the prompt never moves */
+.ask {
+  position: relative;
+}
+.key {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: calc(100% + 9px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 4px 8px;
+  background: rgba(250, 250, 250, 0.94);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 18px;
+}
+.key[hidden] {
+  display: none;
+}
+.key p {
+  margin: 0;
+}
+.key-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 0 4px 0 8px;
+}
+.key-top p {
+  flex: 1;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.key-top .hint-x {
+  flex: none;
+  margin: -3px 0;
+}
+.ask .key input {
+  flex: none;
+  width: 100%;
+  background: var(--chip);
+  padding: 0 12px;
+}
+.key-n {
+  padding: 0 8px;
+  color: var(--muted);
+}
+.key-n a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+@media (hover: hover) {
+  .key-n a:hover {
+    color: var(--ink);
+  }
+}
 .status {
   font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 12px;
