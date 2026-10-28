@@ -549,7 +549,9 @@
   }
 
   // ---------- pointer drawing ----------
-  let pid = null;
+  let pid = null,
+    hintAfterDraw = () => {}; // set by the sound hint below
+
   cv.addEventListener("pointerdown", (e) => {
     if (pid !== null) return;
     cueOff();
@@ -587,6 +589,7 @@
     N = steps[i];
     setN();
     drew(s, "Drawing");
+    hintAfterDraw();
   }
   cv.addEventListener("pointerup", end);
   cv.addEventListener("pointercancel", end);
@@ -1214,16 +1217,19 @@
   showTune();
 
   // ---------- sound hint, every visit ----------
-  // Once per visit, while sound is off: a quiet tooltip points at the sound button, then goes away for
-  // good after 5 s, on any tap or key, or when sound is turned on. The 5 s only counts down while the
+  // Once per visit, while sound is off: a quiet tooltip points at the sound button as soon as the first
+  // drawing is done, or after 8 s of nothing if the visitor never draws. It goes away for good after 5 s,
+  // on any tap or key, or when sound is turned on. The 5 s only counts down while the
   // mouse is off the note and the sound button and focus is not on the x: hovering holds it open.
   const hint = document.getElementById("hint"),
     hintTxt = document.getElementById("hint-t");
   document.getElementById("hint-x").addEventListener("click", hideHint);
   let hintT = 0,
     hintHeld = 0; // pointers over the note or the sound button, plus focus on the x
-  let done = false; // per visit only: it comes back on every page load
-  const seen = () => done;
+  let done = false, // per visit only: it comes back on every page load
+    hinted = false,
+    idleT = 0;
+  const seen = () => done || hinted;
   // Tab and modifiers move focus to the x without closing the hint; Escape and other keys close it
   const HINT_KEEP = ["Tab", "Shift", "Control", "Alt", "Meta", "CapsLock"];
   function hintKey(e) {
@@ -1237,7 +1243,7 @@
       mid = s.left + s.width / 2 - b.left,
       left = Math.min(Math.max(0, mid - 24), Math.max(0, b.width - hint.offsetWidth));
     hint.style.left = left + "px";
-    hint.style.bottom = b.bottom - s.top + 9 + "px";
+    hint.style.setProperty("--hb", b.bottom - s.top + 9 + "px"); // phones lay the tip out in the flow instead
     hint.style.setProperty("--caret", mid - left + "px");
   }
   function hintCount() {
@@ -1262,7 +1268,6 @@
     removeEventListener("resize", placeHint);
     done = true;
     snd.classList.remove("hinted");
-    bar.classList.remove("tipping");
     snd.removeAttribute("aria-describedby");
     hint.classList.remove("open");
     setTimeout(() => {
@@ -1271,18 +1276,19 @@
     }, 250);
   }
   function showHint() {
+    clearTimeout(idleT);
     if (seen() || snd.getAttribute("aria-pressed") === "true") return;
     if (document.visibilityState !== "visible") {
       document.addEventListener("visibilitychange", () => setTimeout(showHint, 1200), { once: true });
       return;
     }
+    hinted = true;
     hint.hidden = false;
     hintTxt.textContent = "Turn on sound to hear your drawing";
     placeHint();
     hint.getBoundingClientRect();
     hint.classList.add("open");
     snd.classList.add("hinted");
-    bar.classList.add("tipping");
     snd.setAttribute("aria-describedby", "hint");
     addEventListener("pointerdown", hideHint, true);
     addEventListener("keydown", hintKey, true);
@@ -1291,9 +1297,23 @@
     hintCount();
   }
   snd.addEventListener("click", () => {
-    if (snd.getAttribute("aria-pressed") === "true" && !seen()) hideHint();
+    if (snd.getAttribute("aria-pressed") === "true" && !done) hideHint();
   });
-  if (!seen()) setTimeout(showHint, 1200);
+  // the first drawing finishing is the cue; 8 s without any input is the fallback
+  function armHint() {
+    clearTimeout(idleT);
+    if (seen()) return;
+    idleT = setTimeout(() => {
+      if (pid !== null || typing()) return armHint(); // mid-stroke or typing: not idle yet
+      showHint();
+    }, 8000);
+  }
+  for (const e of ["pointerdown", "keydown"]) addEventListener(e, armHint, { capture: true, passive: true });
+  hintAfterDraw = () => {
+    clearTimeout(idleT);
+    setTimeout(showHint, 450);
+  };
+  armHint();
 
   // ---------- loop ----------
   function relayout() {
@@ -1310,7 +1330,8 @@
     // back from the back-forward cache counts as a new visit
     if (!done) return;
     done = false;
-    setTimeout(showHint, 1200);
+    hinted = false;
+    armHint();
   });
   // The prompt box needs /api/draw (see README). Ask once, briefly, so the layout settles before
   // the first frame; without the endpoint the app works the same, minus the prompt.

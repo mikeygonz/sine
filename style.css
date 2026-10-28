@@ -444,7 +444,7 @@ input[type="range"]::-moz-range-thumb {
 /* first visit only: a quiet note above the bar */
 .hint {
   position: absolute;
-  bottom: calc(100% + 10px);
+  bottom: var(--hb, calc(100% + 10px));
   left: 0;
   margin: 0;
   padding: 7px 11px;
@@ -509,20 +509,33 @@ input[type="range"]::-moz-range-thumb {
 .hint-x:focus-visible {
   color: var(--ink);
 }
-/* on a phone the tip lies over the prompt: the placeholder and the arrow fade out while it is open, in step
-   with the tip, and back when it closes */
+/* on a phone the tip takes its own row between the prompt and the controls: the prompt moves up to make
+   room, so the tip never covers the input or the presets, and the caret still points down at the sound button */
 @media (max-width: 600px) {
-  .ask input::placeholder {
-    transition: opacity 0.14s ease-out;
+  .ask {
+    order: 0;
   }
-  .go {
-    transition: opacity 0.14s ease-out;
+  .hint {
+    position: relative;
+    order: 1;
+    bottom: auto;
+    align-self: flex-start;
+    height: 34px;
+    box-sizing: border-box;
+    margin-top: -42px; /* closed: no room taken, the 8px gap above is cancelled too */
+    transform: none;
+    transition:
+      opacity 0.14s ease-out,
+      margin-top 0.18s cubic-bezier(0.23, 1, 0.32, 1);
   }
-  .tipping .ask input::placeholder {
-    opacity: 0;
+  .hint.open {
+    margin-top: 0;
+    transition:
+      opacity 0.24s cubic-bezier(0.23, 1, 0.32, 1),
+      margin-top 0.24s cubic-bezier(0.23, 1, 0.32, 1);
   }
-  .tipping .go {
-    opacity: 0;
+  .row {
+    order: 2;
   }
 }
 .snd.hinted {
@@ -733,6 +746,11 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   .hint.open {
     transform: none;
     transition: opacity 0.2s ease-out !important;
+  }
+  @media (max-width: 600px) {
+    .hint {
+      transition: opacity 0.2s ease-out !important;
+    }
   }
   .snd.hinted {
     animation: none;
