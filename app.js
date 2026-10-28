@@ -1212,7 +1212,7 @@
   showTune();
 
   // ---------- sound hint, every visit ----------
-  // Once per visit, while sound is off: a quiet note sits centered above the bar, then goes away for
+  // Once per visit, while sound is off: a quiet tooltip points at the sound button, then goes away for
   // good after 5 s, on any tap or key, or when sound is turned on. The 5 s only counts down while the
   // mouse is off the note and the sound button and focus is not on the x: hovering holds it open.
   const hint = document.getElementById("hint"),
@@ -1228,8 +1228,15 @@
     if (!HINT_KEEP.includes(e.key)) hideHint();
   }
   function placeHint() {
-    // centered over the bar, so it sits on the same axis as the prompt and the canvas
-    hint.style.left = Math.max(0, (bar.offsetWidth - hint.offsetWidth) / 2) + "px";
+    // a tooltip on the sound button: its caret sits over the button's center, and the note slides
+    // sideways, never past the bar, when the button is near an edge
+    const b = bar.getBoundingClientRect(),
+      s = snd.getBoundingClientRect(),
+      mid = s.left + s.width / 2 - b.left,
+      left = Math.min(Math.max(0, mid - 24), Math.max(0, b.width - hint.offsetWidth));
+    hint.style.left = left + "px";
+    hint.style.bottom = b.bottom - s.top + 9 + "px";
+    hint.style.setProperty("--caret", mid - left + "px");
   }
   function hintCount() {
     clearTimeout(hintT);
