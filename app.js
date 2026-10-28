@@ -941,16 +941,16 @@
   const F0 = 220,
     HMAX = 180;
   const SCALES = { penta: [0, 2, 4, 7, 9], major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10] }; // semitones above the root
-  // playful by default: C major pentatonic, plucked, bright and bell-like
+  // warm by default: E-flat pentatonic around E-flat 3 (about 110 to 220 Hz), plucked, few overtones, soft low-pass
   const TUNE = {
     volume: 70,
     scale: "penta",
     notes: "pluck",
-    root: 3,
-    range: 6,
+    root: -6,
+    range: 2,
     glide: 20,
-    overtones: 8,
-    warmth: 35,
+    overtones: 6,
+    warmth: 45,
     room: 45,
   };
   let tune = { ...TUNE };
