@@ -441,7 +441,7 @@ input[type="range"]::-moz-range-thumb {
     opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1),
     transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* first visit only: a quiet note above the bar */
+/* once per visit: a quiet note floating above the prompt, out of the layout, right edge flush with the prompt */
 .hint {
   position: absolute;
   bottom: var(--hb, calc(100% + 10px));
@@ -460,26 +460,12 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
   gap: 2px;
   padding-right: 3px;
-  transform-origin: var(--caret, 24px) calc(100% + 5px);
+  transform-origin: 100% 100%;
   opacity: 0;
   transform: translateY(6px) scale(0.97);
   transition:
     opacity 0.14s ease-out,
     transform 0.14s ease-out;
-}
-/* the caret: a rotated square, half hidden behind the note, pointing at the sound button */
-.hint::after {
-  content: "";
-  position: absolute;
-  left: var(--caret, 24px);
-  bottom: -5px;
-  width: 8px;
-  height: 8px;
-  margin-left: -4px;
-  background: var(--bg);
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  transform: rotate(45deg);
 }
 .hint.open {
   opacity: 1;
@@ -508,19 +494,6 @@ input[type="range"]::-moz-range-thumb {
 .hint-x:hover,
 .hint-x:focus-visible {
   color: var(--ink);
-}
-/* while the tip is open it takes the prompt's place: the prompt fades out (and cannot be focused or tapped),
-   the tip sits in its slot bottom-aligned, caret down at the sound button, and the prompt fades back on close */
-.ask {
-  transition: opacity 0.14s ease-out;
-}
-.tipping .ask {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity 0.14s ease-out,
-    visibility 0s 0.14s;
 }
 .snd.hinted {
   background: var(--chip);
@@ -726,10 +699,10 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     transition: none !important;
   }
   /* the hint still fades, it just does not move */
-  /* the swap with the prompt is instant, nothing slides or fades */
   .hint,
   .hint.open {
     transform: none;
+    transition: opacity 0.2s ease-out !important;
   }
   .snd.hinted {
     animation: none;
