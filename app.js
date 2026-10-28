@@ -731,7 +731,7 @@
       .map((x) => {
         const on = x.id === showing;
         return (
-          `<span class="chip"><button type="button" class="item" data-id="${x.id}" aria-current="${on}">${thumb(x.pts)}<span>${esc(x.name)}</span></button>` +
+          `<span class="chip"><button type="button" class="item" data-id="${x.id}" aria-current="${on}" aria-label="${esc(x.name)}" title="${esc(x.name)}">${thumb(x.pts)}</button>` +
           (on
             ? `<button type="button" class="del" data-id="${x.id}" aria-label="Delete ${esc(x.name)}">${X}<span class="confirm" aria-hidden="true">Delete?</span></button>`
             : "") +
@@ -747,13 +747,8 @@
     strip.classList.toggle("l", seg.scrollLeft > 1);
     strip.classList.toggle("r", seg.scrollLeft < max - 1);
   }
-  function reveal(el) {
-    const l = el.offsetLeft - 12,
-      r = el.offsetLeft + el.offsetWidth + 12;
-    if (l < seg.scrollLeft) seg.scrollTo({ left: l, behavior: RM ? "auto" : "smooth" });
-    else if (r > seg.scrollLeft + seg.clientWidth)
-      seg.scrollTo({ left: r - seg.clientWidth, behavior: RM ? "auto" : "smooth" });
-  }
+  const reveal = (el) =>
+    el.scrollIntoView({ inline: "nearest", block: "nearest", behavior: RM ? "auto" : "smooth" });
   seg.addEventListener("scroll", fades, { passive: true });
   new ResizeObserver(fades).observe(seg);
   keep.addEventListener("click", () => {
