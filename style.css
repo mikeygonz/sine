@@ -335,7 +335,7 @@ button {
 }
 .waves {
   flex: 1;
-  min-width: 150px; /* on wide screens the shape row has priority: the slider takes what is left */
+  min-width: max-content; /* the slider and its readout keep their room; only the shape row gives way */
   display: flex;
   align-items: center;
   gap: 12px;
@@ -349,6 +349,11 @@ button {
   font-variant-numeric: tabular-nums;
   min-width: 16ch;
   text-align: right;
+}
+.waves input[type="range"] {
+  flex: 1 1 116px;
+  width: 116px; /* the track keeps its own room, apart from the readout */
+  min-width: 116px;
 }
 .out b {
   font-weight: 400;
