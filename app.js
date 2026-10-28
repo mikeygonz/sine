@@ -628,7 +628,7 @@
       v ? sessionStorage.setItem(KEY_SLOT, v) : sessionStorage.removeItem(KEY_SLOT);
     } catch (_) {}
   }
-  const freeLabel = () => (own ? "your key" : free === null ? "" : free + " free");
+  const freeLabel = () => (own ? "your key" : free > 0 ? free + " free" : "");
   function keyOpen(text) {
     keyT.textContent = text;
     keyBox.hidden = false;
@@ -657,9 +657,9 @@
   keyIn.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
-    if (!keyTake()) keyT.textContent = "That is not a gateway key. It starts with vck_.";
+    if (!keyTake()) keyT.textContent = "That key didn't work. Paste it again.";
   });
-  const OUT = "You used your 3 free tries. Paste your own Vercel AI Gateway key to keep drawing.";
+  const OUT = "You used your 3 free AI drawings. Paste your Vercel AI Gateway key to keep using AI.";
   let job = 0,
     live = null;
   function status(text, busy) {
@@ -720,7 +720,7 @@
     if (ok) {
       apply(true);
       status(freeLabel());
-      if (!own && free === 0) keyOpen("That was your last free try. Paste your own Vercel AI Gateway key to keep drawing.");
+      if (!own && free === 0) keyOpen(OUT);
     } else if (err === "gate") status(freeLabel());
     else status(err === "limit" ? "too many, try later" : err === "bot" ? "blocked" : "couldn’t draw that");
     if (!ok && err !== "gate")
@@ -734,6 +734,8 @@
     e.preventDefault();
     const text = q.value.trim().slice(0, 60);
     if (!text || live) return;
+    // out of free tries and no key: bring the panel back, even if it was closed with the x
+    if (!own && free === 0) return keyOpen(OUT);
     q.blur();
     promptStart(text);
     const id = job;
@@ -749,15 +751,15 @@
         if (code === "tries") free = 0;
         if (own && code === "key") {
           setOwn("");
-          keyOpen("That key did not work. Check it and paste it again.");
+          keyOpen("That key didn't work. Paste it again.");
           promptEnd("gate");
         } else if (code === "tries") {
           keyOpen(OUT);
           promptEnd("gate");
         } else if (code === "cap" || code === "paused") {
           keyOpen(
-            (code === "cap" ? "Free drawing is full for today." : "Free drawing is paused.") +
-              " Paste your own Vercel AI Gateway key to draw now.",
+            (code === "cap" ? "Free AI drawings are full for today." : "Free AI drawings are paused.") +
+              " Paste your Vercel AI Gateway key to keep using AI.",
           );
           promptEnd("gate");
         } else promptEnd(code === "burst" || r.status === 429 ? "limit" : code === "bot" ? "bot" : "fail");

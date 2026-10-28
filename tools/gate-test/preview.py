@@ -14,7 +14,7 @@ What it checks on the deployment:
 Not covered here: a person's own browser passing BotID and drawing 3 times (headless browsers are blocked on
 purpose, so that is a by-hand check), and the 3-try counting itself, which local.mjs proves against real Redis.
 """
-import json, os, re, sys
+import json, math, os, re, sys
 from playwright.sync_api import sync_playwright
 
 
@@ -66,12 +66,21 @@ def post(page, prompt, key=None):
     )
 
 
-STUB = json.dumps({"ok": True, "free": {"left": 0, "limit": 3}})
+def stub_get(page, left=0):
+    # answer GET /api/draw as if this IP had `left` tries; everything else goes to the real deployment
+    body = json.dumps({"ok": True, "free": {"left": left, "limit": 3}})
+    page.route("**/api/draw", lambda r: r.fulfill(status=200, content_type="application/json", body=body) if r.request.method == "GET" else r.continue_())
 
 
-def stub_get(page):
-    # answer GET /api/draw as if this IP had used its 3 tries; everything else goes to the real deployment
-    page.route("**/api/draw", lambda r: r.fulfill(status=200, content_type="application/json", body=STUB) if r.request.method == "GET" else r.continue_())
+CIRCLE = "".join(f"{round(500 + 300 * math.cos(i / 16 * 2 * math.pi))},{round(500 + 300 * math.sin(i / 16 * 2 * math.pi))}\n" for i in range(16))
+
+
+def stub_post(page, status, code=None, left=2):
+    # answer POST /api/draw like the server would: a drawing with x-free-left, or a refusal with a code
+    if status == 200:
+        page.route("**/api/draw", lambda r: r.fulfill(status=200, headers={"content-type": "text/plain", "x-free-left": str(left)}, body=CIRCLE) if r.request.method == "POST" else r.fallback())
+    else:
+        page.route("**/api/draw", lambda r: r.fulfill(status=status, content_type="application/json", body=json.dumps({"error": "no", "code": code})) if r.request.method == "POST" else r.fallback())
 
 
 with sync_playwright() as p:
@@ -106,8 +115,8 @@ with sync_playwright() as p:
     stub_get(page3)
     page3.goto(URL, wait_until="load")
     page3.wait_for_selector("#key:not([hidden])", timeout=8000)
-    check("the key panel opens on load when the server says 0 left", "3 free tries" in page3.inner_text("#key-t"), page3.inner_text("#key-t"))
-    check("the count shows in the prompt row", page3.inner_text("#status").strip() == "0 free", page3.inner_text("#status"))
+    check("the key panel opens on load when the server says 0 left", "3 free AI drawings" in page3.inner_text("#key-t"), page3.inner_text("#key-t"))
+    check("the count is hidden at 0", not page3.is_visible("#status"), page3.inner_text("#status"))
     open390 = rect(page3, "#q")
     page3.wait_for_timeout(400)
     page3.screenshot(path=f"{SHOTS}/out-of-tries-390.png")
@@ -139,12 +148,85 @@ with sync_playwright() as p:
     page2.fill("#q", "a cat")
     page2.fill("#gk", FAKE_KEY)
     page2.dispatch_event("#gk", "change")  # a paste does the same
-    page2.wait_for_function("() => document.getElementById('key-t').textContent.includes('did not work')", timeout=20000)
-    check("pasting a rejected key shows a plain note", "did not work" in page2.inner_text("#key-t"), page2.inner_text("#key-t"))
+    page2.wait_for_function("() => document.getElementById('key-t').textContent.includes(\"didn't work\")", timeout=20000)
+    check("pasting a rejected key shows a plain note", "didn't work" in page2.inner_text("#key-t"), page2.inner_text("#key-t"))
     check("the rejected key is gone from sessionStorage", page2.evaluate("sessionStorage.getItem('sine-gateway-key')") is None)
     check("no key in localStorage", FAKE_KEY not in json.dumps(page2.evaluate("Object.fromEntries(Object.entries(localStorage))")))
     check("the prompt box is still there, with its text", page2.is_visible("#q") and page2.input_value("#q") == "a cat")
-    page2.screenshot(path=f"{SHOTS}/key-rejected-1280.png")
+
+    # ---- round 2: the three states at both widths, and the x check ----
+    for w, h, mob in [(390, 844, True), (1280, 800, False)]:
+        kw = dict(viewport={"width": w, "height": h}, device_scale_factor=2 if mob else 1, is_mobile=mob, has_touch=mob)
+
+        # out of tries (stubbed count), then close with the x and submit again
+        pg = b1.new_context(**kw).new_page()
+        posts = []
+        pg.on("request", lambda r: posts.append(r.url) if r.method == "POST" and "/api/draw" in r.url else None)
+        stub_get(pg, 0)
+        pg.goto(URL, wait_until="load")
+        pg.wait_for_selector("#key:not([hidden])", timeout=8000)
+        pg.wait_for_timeout(400)
+        pg.screenshot(path=f"{SHOTS}/out-of-tries-{w}.png")
+        box = rect(pg, "#q")
+        pg.click("#key-x")
+        pg.wait_for_timeout(300)
+        closed = not pg.is_visible("#key")
+        pg.fill("#q", "a cat")
+        pg.press("#q", "Enter")
+        pg.wait_for_timeout(500)
+        check(f"[{w}] closing with the x, then another AI submit, brings the panel back", closed and pg.is_visible("#key"), f"closed={closed}")
+        check(f"[{w}] ...with no request sent and the prompt kept in place", posts == [] and rect(pg, "#q") == box and pg.input_value("#q") == "a cat", f"{posts} {box} {rect(pg, '#q')}")
+
+        # key rejected: a real call to the gateway with a made-up key
+        pg.fill("#gk", FAKE_KEY)
+        pg.dispatch_event("#gk", "change")
+        pg.wait_for_function("() => document.getElementById('key-t').textContent === \"That key didn't work. Paste it again.\"", timeout=20000)
+        pg.wait_for_timeout(400)
+        pg.screenshot(path=f"{SHOTS}/key-rejected-{w}.png")
+        check(f"[{w}] a rejected key shows the exact copy, and the prompt box stayed put", rect(pg, "#q") == box)
+
+        # server-driven path: the server answers 402, panel opens, x closes it, the next submit asks again
+        pg4 = b1.new_context(**kw).new_page()
+        stub_get(pg4, 3)
+        stub_post(pg4, 402, "tries")
+        pg4.goto(URL, wait_until="load")
+        pg4.wait_for_selector("#ask:not([hidden])", timeout=8000)
+        pg4.fill("#q", "a cat")
+        pg4.press("#q", "Enter")
+        pg4.wait_for_selector("#key:not([hidden])", timeout=8000)
+        pg4.click("#key-x")
+        pg4.wait_for_timeout(300)
+        pg4.press("#q", "Enter")
+        pg4.wait_for_timeout(1200)
+        check(f"[{w}] the same holds when the server is the one saying no (402)", pg4.is_visible("#key"))
+
+        # 2 free left, shown after a drawing
+        pg3 = b1.new_context(**kw).new_page()
+        stub_get(pg3, 3)
+        stub_post(pg3, 200, left=2)
+        pg3.goto(URL, wait_until="load")
+        pg3.wait_for_selector("#ask:not([hidden])", timeout=8000)
+        pg3.fill("#q", "a cat")
+        pg3.press("#q", "Enter")
+        pg3.wait_for_function("() => document.getElementById('status').textContent === '2 free'", timeout=20000)
+        pg3.wait_for_timeout(1500)
+        pg3.screenshot(path=f"{SHOTS}/two-free-{w}.png")
+        font = pg3.evaluate("(() => { const a = getComputedStyle(document.getElementById('status')), b = getComputedStyle(document.getElementById('q')); return [a.fontFamily === b.fontFamily, a.fontSize === b.fontSize, a.color]; })()")
+        check(f"[{w}] the count uses the prompt's font and size, in the muted color", font[0] and font[1] and font[2] == "rgb(115, 115, 115)", font)
+        fit = pg3.evaluate("""(() => {
+          const q = document.getElementById('q'), cs = getComputedStyle(q), c = document.createElement('canvas').getContext('2d');
+          c.font = cs.fontSize + ' ' + cs.fontFamily;
+          return c.measureText(q.placeholder).width <= q.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        })()""")
+        check(f"[{w}] the placeholder still fits next to the count", fit)
+        pg5 = b1.new_context(**kw).new_page()
+        stub_get(pg5, 0)
+        pg5.goto(URL, wait_until="load")
+        pg5.wait_for_selector("#key:not([hidden])", timeout=8000)
+        sizes = pg5.evaluate("['key-t', 'gk'].map(i => getComputedStyle(document.getElementById(i)).fontSize).concat([getComputedStyle(document.querySelector('.key-n')).fontSize])")
+        check(f"[{w}] one text size across the panel, and the footnote is muted", len(set(sizes)) == 1 and pg5.evaluate("getComputedStyle(document.querySelector('.key-n')).color") == "rgb(115, 115, 115)", sizes)
+        kb = pg5.evaluate("(() => { const g = getComputedStyle(document.getElementById('gk')), a = getComputedStyle(document.getElementById('ask')); return [g.borderTopWidth + g.borderTopStyle + g.borderTopColor === a.borderTopWidth + a.borderTopStyle + a.borderTopColor, g.backgroundColor, document.getElementById('gk').getBoundingClientRect().height, document.getElementById('ask').getBoundingClientRect().height]; })()")
+        check(f"[{w}] the key field has the prompt's border and height, and no fill", kb[0] and kb[1] == "rgba(0, 0, 0, 0)" and kb[2] == kb[3], kb)
     b2.close()
     b1.close()
 

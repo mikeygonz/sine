@@ -167,8 +167,8 @@ header p {
   backdrop-filter: blur(12px);
   border: 1px solid var(--line);
   border-radius: 14px;
-  font-size: 13px;
-  line-height: 18px;
+  font-size: 16px; /* one size for the whole panel, same as the prompt */
+  line-height: 22px;
 }
 .key[hidden] {
   display: none;
@@ -189,13 +189,22 @@ header p {
 }
 .key-top .hint-x {
   flex: none;
-  margin: -3px 0;
+  margin: -1px 0;
 }
 .ask .key input {
   flex: none;
+  box-sizing: border-box;
   width: 100%;
-  background: var(--chip);
-  padding: 0 12px;
+  height: 54px; /* the prompt row: 44px field, 4px padding, 1px border */
+  margin: 4px 0;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0 16px;
+}
+.ask .key input:focus-visible {
+  background: none;
+  border-color: var(--muted);
 }
 .key-n {
   padding: 0 8px;
@@ -212,8 +221,7 @@ header p {
   }
 }
 .status {
-  font-family: "Geist Mono", ui-monospace, monospace;
-  font-size: 12px;
+  font-size: 16px; /* the placeholder's size, in the page's sans */
   color: var(--muted);
   white-space: nowrap;
   padding-right: 4px;
