@@ -149,9 +149,74 @@ header p {
   outline: none;
   background: var(--chip);
 }
+/* out of free tries: a panel floating 8px above the prompt, out of the layout, so the prompt never moves */
+.ask {
+  position: relative;
+}
+.key {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: calc(100% + 9px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px; /* the one inner padding: message, field and footnote all sit on it */
+  background: #fafafa;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font-size: 16px; /* one size for the whole panel, same as the prompt */
+  line-height: 22px;
+}
+.key[hidden] {
+  display: none;
+}
+.key p {
+  margin: 0;
+}
+.key-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.key-top p {
+  flex: 1;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.key-top .hint-x {
+  flex: none;
+  margin: -1px -6px -1px 0; /* the x glyph sits on the same edge as the field */
+}
+.ask .key input {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  height: 54px; /* the prompt row: 44px field, 4px padding, 1px border */
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0 12px;
+}
+.ask .key input:focus-visible {
+  background: none;
+  border-color: var(--muted);
+}
+.key-n {
+  color: var(--muted);
+}
+.key-n a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+@media (hover: hover) {
+  .key-n a:hover {
+    color: var(--ink);
+  }
+}
 .status {
-  font-family: "Geist Mono", ui-monospace, monospace;
-  font-size: 12px;
+  font-size: 16px; /* the placeholder's size, in the page's sans */
   color: var(--muted);
   white-space: nowrap;
   padding-right: 4px;
@@ -441,10 +506,10 @@ input[type="range"]::-moz-range-thumb {
     opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1),
     transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* first visit only: a quiet note above the bar */
+/* once per visit: a quiet note floating above the prompt, out of the layout, right edge flush with the prompt */
 .hint {
   position: absolute;
-  bottom: calc(100% + 10px);
+  bottom: var(--hb, calc(100% + 10px));
   left: 0;
   margin: 0;
   padding: 7px 11px;
@@ -460,9 +525,9 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
   gap: 2px;
   padding-right: 3px;
-  transform-origin: 50% calc(100% + 5px);
+  transform-origin: 100% 100%;
   opacity: 0;
-  transform: translateY(4px) scale(0.97);
+  transform: translateY(6px) scale(0.97);
   transition:
     opacity 0.14s ease-out,
     transform 0.14s ease-out;

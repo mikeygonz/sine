@@ -18,7 +18,10 @@
   const ask = document.getElementById("ask"),
     q = document.getElementById("q"),
     go = document.getElementById("go"),
-    statusEl = document.getElementById("status");
+    statusEl = document.getElementById("status"),
+    keyBox = document.getElementById("key"),
+    keyT = document.getElementById("key-t"),
+    keyIn = document.getElementById("gk");
   const rmq = matchMedia("(prefers-reduced-motion: reduce)");
   let RM = rmq.matches;
   rmq.addEventListener &&
@@ -344,8 +347,10 @@
     cueA = 0;
   const cueOff = () => (cueOn = false);
   function cue() {
-    const { R, cx, cy } = L;
-    const y = Math.min(cy + R * 0.82 + 34, bar.getBoundingClientRect().top - 24); // just under the star
+    const { R, cy } = L,
+      cx = W / 2; // centered on the canvas, also beside the wave on wide screens
+    // just under the shape; on a wide screen the wave runs right of the circles, so go below it too
+    const y = Math.min(L.side ? cy + R + 26 : cy + R * 0.82 + 34, bar.getBoundingClientRect().top - 24);
     ctx.font = "13px Geist, ui-sans-serif, system-ui, sans-serif";
     ctx.textBaseline = "middle";
     const tw = ctx.measureText("Draw here").width,
@@ -547,7 +552,9 @@
   }
 
   // ---------- pointer drawing ----------
-  let pid = null;
+  let pid = null,
+    hintAfterDraw = () => {}; // set by the sound hint below
+
   cv.addEventListener("pointerdown", (e) => {
     if (pid !== null) return;
     cueOff();
@@ -585,6 +592,7 @@
     N = steps[i];
     setN();
     drew(s, "Drawing");
+    hintAfterDraw();
   }
   cv.addEventListener("pointerup", end);
   cv.addEventListener("pointercancel", end);
@@ -603,6 +611,55 @@
   });
 
   // ---------- prompt: stream points from /api/draw and morph as they arrive ----------
+  // Free tries are counted on the server by IP. After the free ones, the visitor pastes their own AI Gateway
+  // key. It is kept in sessionStorage: it survives a reload of this tab but is gone when the tab closes, is
+  // never shared across tabs, and is never written to localStorage. It is sent only to /api/draw, as a header.
+  const KEY_RE = /^vck_[A-Za-z0-9_-]{20,200}$/,
+    KEY_SLOT = "sine-gateway-key";
+  let free = null, // tries left on the server, or null if unknown
+    own = "";
+  try {
+    own = sessionStorage.getItem(KEY_SLOT) || "";
+    if (!KEY_RE.test(own)) own = "";
+  } catch (_) {}
+  function setOwn(v) {
+    own = v;
+    try {
+      v ? sessionStorage.setItem(KEY_SLOT, v) : sessionStorage.removeItem(KEY_SLOT);
+    } catch (_) {}
+  }
+  const freeLabel = () => (own ? "your key" : free > 0 ? free + " free" : "");
+  function keyOpen(text) {
+    keyT.textContent = text;
+    keyBox.hidden = false;
+    hideHint(); // the sound note floats in the same spot
+  }
+  const keyShut = () => (keyBox.hidden = true);
+  document.getElementById("key-x").addEventListener("click", () => {
+    keyShut();
+    q.focus();
+  });
+  cv.addEventListener("pointerdown", keyShut);
+  addEventListener("keydown", (e) => e.key === "Escape" && !keyBox.hidden && keyShut());
+  function keyTake() {
+    const v = keyIn.value.trim();
+    if (!KEY_RE.test(v)) return false;
+    setOwn(v);
+    keyIn.value = "";
+    keyShut();
+    status(freeLabel());
+    if (q.value.trim() && !live) ask.requestSubmit();
+    else q.focus();
+    return true;
+  }
+  keyIn.addEventListener("paste", () => setTimeout(keyTake)); // a typed key is taken on Enter, not mid-word
+  keyIn.addEventListener("change", keyTake);
+  keyIn.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (!keyTake()) keyT.textContent = "That key didn't work. Paste it again.";
+  });
+  const OUT = "You used your 3 free AI drawings. Paste your Vercel AI Gateway key to keep using AI.";
   let job = 0,
     live = null;
   function status(text, busy) {
@@ -662,11 +719,13 @@
     if (live.buf) promptFeed("\n");
     if (ok) {
       apply(true);
-      status("");
-    } else status(err === "limit" ? "too many, try later" : "couldn’t draw that");
-    if (!ok)
+      status(freeLabel());
+      if (!own && free === 0) keyOpen(OUT);
+    } else if (err === "gate") status(freeLabel());
+    else status(err === "limit" ? "too many, try later" : err === "bot" ? "blocked" : "couldn’t draw that");
+    if (!ok && err !== "gate")
       setTimeout(() => {
-        if (!live) status("");
+        if (!live) status(freeLabel());
       }, err === "limit" ? 5000 : 3200);
     live = null;
     go.disabled = !q.value.trim();
@@ -675,19 +734,39 @@
     e.preventDefault();
     const text = q.value.trim().slice(0, 60);
     if (!text || live) return;
+    // out of free tries and no key: bring the panel back, even if it was closed with the x
+    if (!own && free === 0) return keyOpen(OUT);
     q.blur();
     promptStart(text);
     const id = job;
     try {
       const r = await fetch("/api/draw", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(own && { "x-gateway-key": own }) },
         body: JSON.stringify({ prompt: text }),
       });
       if (!r.ok || !r.body) {
-        promptEnd(r.status === 429 ? "limit" : "fail");
+        const code = ((await r.json().catch(() => null)) || {}).code;
+        if (id !== job) return;
+        if (code === "tries") free = 0;
+        if (own && code === "key") {
+          setOwn("");
+          keyOpen("That key didn't work. Paste it again.");
+          promptEnd("gate");
+        } else if (code === "tries") {
+          keyOpen(OUT);
+          promptEnd("gate");
+        } else if (code === "cap" || code === "paused") {
+          keyOpen(
+            (code === "cap" ? "Free AI drawings are full for today." : "Free AI drawings are paused.") +
+              " Paste your Vercel AI Gateway key to keep using AI.",
+          );
+          promptEnd("gate");
+        } else promptEnd(code === "burst" || r.status === 429 ? "limit" : code === "bot" ? "bot" : "fail");
         return;
       }
+      const left = r.headers.get("x-free-left");
+      if (left !== null && !own) free = +left;
       const rd = r.body.getReader(),
         dec = new TextDecoder();
       while (true) {
@@ -862,16 +941,16 @@
   const F0 = 220,
     HMAX = 180;
   const SCALES = { penta: [0, 2, 4, 7, 9], major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10] }; // semitones above the root
-  // playful by default: C major pentatonic, plucked, bright and bell-like
+  // warm by default: E-flat pentatonic around E-flat 3 (about 110 to 220 Hz), plucked, few overtones, soft low-pass
   const TUNE = {
     volume: 70,
     scale: "penta",
     notes: "pluck",
-    root: 3,
-    range: 6,
+    root: -6,
+    range: 2,
     glide: 20,
-    overtones: 8,
-    warmth: 35,
+    overtones: 6,
+    warmth: 45,
     room: 45,
   };
   let tune = { ...TUNE };
@@ -1212,24 +1291,32 @@
   showTune();
 
   // ---------- sound hint, every visit ----------
-  // Once per visit, while sound is off: a quiet note sits centered above the bar, then goes away for
-  // good after 5 s, on any tap or key, or when sound is turned on. The 5 s only counts down while the
+  // Once per visit, while sound is off: a quiet tooltip points at the sound button as soon as the first
+  // drawing is done, or after 8 s of nothing if the visitor never draws. It goes away for good after 5 s,
+  // on any tap or key, or when sound is turned on. The 5 s only counts down while the
   // mouse is off the note and the sound button and focus is not on the x: hovering holds it open.
   const hint = document.getElementById("hint"),
     hintTxt = document.getElementById("hint-t");
   document.getElementById("hint-x").addEventListener("click", hideHint);
   let hintT = 0,
     hintHeld = 0; // pointers over the note or the sound button, plus focus on the x
-  let done = false; // per visit only: it comes back on every page load
-  const seen = () => done;
+  let done = false, // per visit only: it comes back on every page load
+    hinted = false,
+    idleT = 0;
+  const seen = () => done || hinted;
   // Tab and modifiers move focus to the x without closing the hint; Escape and other keys close it
   const HINT_KEEP = ["Tab", "Shift", "Control", "Alt", "Meta", "CapsLock"];
   function hintKey(e) {
     if (!HINT_KEEP.includes(e.key)) hideHint();
   }
   function placeHint() {
-    // centered over the bar, so it sits on the same axis as the prompt and the canvas
-    hint.style.left = Math.max(0, (bar.offsetWidth - hint.offsetWidth) / 2) + "px";
+    // floats out of the layout, flush with the prompt's right edge and 8px above it, over empty canvas; with
+    // no prompt on this deploy it sits above the controls instead. No caret: the prompt sits between the
+    // note and the sound button, so one would point through the input. The button's gray fill ties them.
+    const b = bar.getBoundingClientRect(),
+      top = (ask.hidden ? bar.querySelector(".row") : ask).getBoundingClientRect().top;
+    hint.style.left = Math.max(0, b.width - hint.offsetWidth) + "px";
+    hint.style.setProperty("--hb", b.bottom - top + 8 + "px");
   }
   function hintCount() {
     clearTimeout(hintT);
@@ -1261,11 +1348,13 @@
     }, 250);
   }
   function showHint() {
+    clearTimeout(idleT);
     if (seen() || snd.getAttribute("aria-pressed") === "true") return;
     if (document.visibilityState !== "visible") {
       document.addEventListener("visibilitychange", () => setTimeout(showHint, 1200), { once: true });
       return;
     }
+    hinted = true;
     hint.hidden = false;
     hintTxt.textContent = "Turn on sound to hear your drawing";
     placeHint();
@@ -1280,9 +1369,23 @@
     hintCount();
   }
   snd.addEventListener("click", () => {
-    if (snd.getAttribute("aria-pressed") === "true" && !seen()) hideHint();
+    if (snd.getAttribute("aria-pressed") === "true" && !done) hideHint();
   });
-  if (!seen()) setTimeout(showHint, 1200);
+  // the first drawing finishing is the cue; 8 s without any input is the fallback
+  function armHint() {
+    clearTimeout(idleT);
+    if (seen()) return;
+    idleT = setTimeout(() => {
+      if (pid !== null || typing()) return armHint(); // mid-stroke or typing: not idle yet
+      showHint();
+    }, 8000);
+  }
+  for (const e of ["pointerdown", "keydown"]) addEventListener(e, armHint, { capture: true, passive: true });
+  hintAfterDraw = () => {
+    clearTimeout(idleT);
+    setTimeout(showHint, 450);
+  };
+  armHint();
 
   // ---------- loop ----------
   function relayout() {
@@ -1299,7 +1402,8 @@
     // back from the back-forward cache counts as a new visit
     if (!done) return;
     done = false;
-    setTimeout(showHint, 1200);
+    hinted = false;
+    armHint();
   });
   // The prompt box needs /api/draw (see README). Ask once, briefly, so the layout settles before
   // the first frame; without the endpoint the app works the same, minus the prompt.
@@ -1310,6 +1414,11 @@
     .catch(() => null)
     .then((v) => {
       ask.hidden = !(v && v.ok);
+      if (v && v.ok && v.free && typeof v.free.left === "number") free = v.free.left;
+      if (!ask.hidden && !own && free === 0) {
+        status(freeLabel());
+        keyOpen(OUT);
+      }
       start();
     });
   function start() {
