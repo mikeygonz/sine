@@ -441,10 +441,10 @@ input[type="range"]::-moz-range-thumb {
     opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1),
     transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* first visit only: a quiet note above the bar */
+/* once per visit: a quiet note floating above the prompt, out of the layout, right edge flush with the prompt */
 .hint {
   position: absolute;
-  bottom: calc(100% + 10px);
+  bottom: var(--hb, calc(100% + 10px));
   left: 0;
   margin: 0;
   padding: 7px 11px;
@@ -460,9 +460,9 @@ input[type="range"]::-moz-range-thumb {
   align-items: center;
   gap: 2px;
   padding-right: 3px;
-  transform-origin: 50% calc(100% + 5px);
+  transform-origin: 100% 100%;
   opacity: 0;
-  transform: translateY(4px) scale(0.97);
+  transform: translateY(6px) scale(0.97);
   transition:
     opacity 0.14s ease-out,
     transform 0.14s ease-out;

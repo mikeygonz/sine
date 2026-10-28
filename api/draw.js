@@ -1,4 +1,4 @@
-// Optional. Powers the "Draw anything" box; the rest of Sine needs no server.
+// Optional. Powers the "Type something for AI to draw" box; the rest of Sine needs no server.
 // POST /api/draw {prompt} -> text/plain stream of "x,y\n" points (0-1000 box).
 // GET /api/draw -> {ok}: whether a gateway token is set, so the page knows to show the box.
 // The model writes sparse key points; each one is joined to the last with a spline (_spline.js)

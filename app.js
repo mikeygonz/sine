@@ -344,8 +344,10 @@
     cueA = 0;
   const cueOff = () => (cueOn = false);
   function cue() {
-    const { R, cx, cy } = L;
-    const y = Math.min(cy + R * 0.82 + 34, bar.getBoundingClientRect().top - 24); // just under the star
+    const { R, cy } = L,
+      cx = W / 2; // centered on the canvas, also beside the wave on wide screens
+    // just under the shape; on a wide screen the wave runs right of the circles, so go below it too
+    const y = Math.min(L.side ? cy + R + 26 : cy + R * 0.82 + 34, bar.getBoundingClientRect().top - 24);
     ctx.font = "13px Geist, ui-sans-serif, system-ui, sans-serif";
     ctx.textBaseline = "middle";
     const tw = ctx.measureText("Draw here").width,
@@ -547,7 +549,9 @@
   }
 
   // ---------- pointer drawing ----------
-  let pid = null;
+  let pid = null,
+    hintAfterDraw = () => {}; // set by the sound hint below
+
   cv.addEventListener("pointerdown", (e) => {
     if (pid !== null) return;
     cueOff();
@@ -585,6 +589,7 @@
     N = steps[i];
     setN();
     drew(s, "Drawing");
+    hintAfterDraw();
   }
   cv.addEventListener("pointerup", end);
   cv.addEventListener("pointercancel", end);
@@ -1212,24 +1217,32 @@
   showTune();
 
   // ---------- sound hint, every visit ----------
-  // Once per visit, while sound is off: a quiet note sits centered above the bar, then goes away for
-  // good after 5 s, on any tap or key, or when sound is turned on. The 5 s only counts down while the
+  // Once per visit, while sound is off: a quiet tooltip points at the sound button as soon as the first
+  // drawing is done, or after 8 s of nothing if the visitor never draws. It goes away for good after 5 s,
+  // on any tap or key, or when sound is turned on. The 5 s only counts down while the
   // mouse is off the note and the sound button and focus is not on the x: hovering holds it open.
   const hint = document.getElementById("hint"),
     hintTxt = document.getElementById("hint-t");
   document.getElementById("hint-x").addEventListener("click", hideHint);
   let hintT = 0,
     hintHeld = 0; // pointers over the note or the sound button, plus focus on the x
-  let done = false; // per visit only: it comes back on every page load
-  const seen = () => done;
+  let done = false, // per visit only: it comes back on every page load
+    hinted = false,
+    idleT = 0;
+  const seen = () => done || hinted;
   // Tab and modifiers move focus to the x without closing the hint; Escape and other keys close it
   const HINT_KEEP = ["Tab", "Shift", "Control", "Alt", "Meta", "CapsLock"];
   function hintKey(e) {
     if (!HINT_KEEP.includes(e.key)) hideHint();
   }
   function placeHint() {
-    // centered over the bar, so it sits on the same axis as the prompt and the canvas
-    hint.style.left = Math.max(0, (bar.offsetWidth - hint.offsetWidth) / 2) + "px";
+    // floats out of the layout, flush with the prompt's right edge and 8px above it, over empty canvas; with
+    // no prompt on this deploy it sits above the controls instead. No caret: the prompt sits between the
+    // note and the sound button, so one would point through the input. The button's gray fill ties them.
+    const b = bar.getBoundingClientRect(),
+      top = (ask.hidden ? bar.querySelector(".row") : ask).getBoundingClientRect().top;
+    hint.style.left = Math.max(0, b.width - hint.offsetWidth) + "px";
+    hint.style.setProperty("--hb", b.bottom - top + 8 + "px");
   }
   function hintCount() {
     clearTimeout(hintT);
@@ -1261,11 +1274,13 @@
     }, 250);
   }
   function showHint() {
+    clearTimeout(idleT);
     if (seen() || snd.getAttribute("aria-pressed") === "true") return;
     if (document.visibilityState !== "visible") {
       document.addEventListener("visibilitychange", () => setTimeout(showHint, 1200), { once: true });
       return;
     }
+    hinted = true;
     hint.hidden = false;
     hintTxt.textContent = "Turn on sound to hear your drawing";
     placeHint();
@@ -1280,9 +1295,23 @@
     hintCount();
   }
   snd.addEventListener("click", () => {
-    if (snd.getAttribute("aria-pressed") === "true" && !seen()) hideHint();
+    if (snd.getAttribute("aria-pressed") === "true" && !done) hideHint();
   });
-  if (!seen()) setTimeout(showHint, 1200);
+  // the first drawing finishing is the cue; 8 s without any input is the fallback
+  function armHint() {
+    clearTimeout(idleT);
+    if (seen()) return;
+    idleT = setTimeout(() => {
+      if (pid !== null || typing()) return armHint(); // mid-stroke or typing: not idle yet
+      showHint();
+    }, 8000);
+  }
+  for (const e of ["pointerdown", "keydown"]) addEventListener(e, armHint, { capture: true, passive: true });
+  hintAfterDraw = () => {
+    clearTimeout(idleT);
+    setTimeout(showHint, 450);
+  };
+  armHint();
 
   // ---------- loop ----------
   function relayout() {
@@ -1299,7 +1328,8 @@
     // back from the back-forward cache counts as a new visit
     if (!done) return;
     done = false;
-    setTimeout(showHint, 1200);
+    hinted = false;
+    armHint();
   });
   // The prompt box needs /api/draw (see README). Ask once, briefly, so the layout settles before
   // the first frame; without the endpoint the app works the same, minus the prompt.

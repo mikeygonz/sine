@@ -1,6 +1,6 @@
 # Sine
 
-Your stroke is run through a Fourier transform. Each frequency becomes a circle, added largest first, so the slider shows how many circles a shape needs. Try it at [sine.gonz.co](https://sine.gonz.co).
+Draw a shape. Hear its Fourier series. Sine rebuilds your stroke from spinning circles, one sine wave each, added largest first, and plays it as sound. Try it at [sine.gonz.co](https://sine.gonz.co).
 
 ## Run it
 
@@ -14,7 +14,7 @@ Or open it with any static server. Shapes you save stay in your browser's local 
 
 ## Draw from text (optional)
 
-The "Draw anything" box asks a model to sketch a prompt as one line. It runs as a Vercel Function in `api/draw.js` through [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) and only shows up when a token is available:
+The text box ("Type something for AI to draw") asks a model to sketch a prompt as one line. It runs as a Vercel Function in `api/draw.js` through [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) and only shows up when a token is available:
 
 - Deployed on Vercel, it uses the project's OIDC token automatically.
 - Anywhere else, set `AI_GATEWAY_API_KEY` and run `vercel dev`.
