@@ -1,0 +1,8 @@
+{
+  "name": "sine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A Fourier series drawing toy.",
+  "license": "MIT",
+  "type": "module"
+}
