@@ -3,6 +3,7 @@
     S = M,
     TAU = Math.PI * 2;
   const BASE = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 128, 255, 512, 1000];
+  const DRAW_PCT = 95; // a hand drawing starts at the fewest waves that match it this closely
   const DRAW_N = 255; // prompt drawings form at this many waves; at 5 they read as a blob
   const cv = document.getElementById("c"),
     ctx = cv.getContext("2d");
@@ -189,6 +190,19 @@
     energy = 0;
     for (const j of order) energy += to.re[j] ** 2 + to.im[j] ** 2;
   }
+  // the match for the biggest n waves, and the whole percent the readout shows for it
+  const fidOf = (kept) => 1 - Math.sqrt(Math.max(0, energy - kept) / (energy || 1));
+  const pctOf = (f) => (f >= 0.9995 ? 100 : Math.min(99, Math.round(f * 100)));
+  // the smallest slider step whose readout reaches `goal` percent, or the last step if none does
+  function stepFor(goal) {
+    let kept = 0,
+      at = 0;
+    for (let i = 0; i < steps.length; i++) {
+      for (; at < Math.min(steps[i], order.length); at++) kept += to.re[order[at]] ** 2 + to.im[order[at]] ** 2;
+      if (pctOf(fidOf(kept)) >= goal) return i;
+    }
+    return steps.length - 1;
+  }
   function setN() {
     wt.fill(0);
     const n = Math.min(N, order.length);
@@ -198,8 +212,8 @@
       const j = order[i];
       kept += to.re[j] ** 2 + to.im[j] ** 2;
     }
-    fid = 1 - Math.sqrt(Math.max(0, energy - kept) / (energy || 1));
-    const pct = fid >= 0.9995 ? 100 : Math.min(99, Math.round(fid * 100));
+    fid = fidOf(kept);
+    const pct = pctOf(fid);
     out.innerHTML = `<b>${N}</b> ${N === 1 ? "wave" : "waves"} · ${pct}%`;
     slider.setAttribute("aria-valuetext", `${N} ${N === 1 ? "wave" : "waves"}, ${pct}% match`);
     slider.style.setProperty("--p", (+slider.value / +slider.max) * 100 + "%");
@@ -565,6 +579,11 @@
     const nz = normalize(resample(s, M));
     pick("yours");
     load(nz.pts, { fresh: true, raw: { cx: nz.cx, cy: nz.cy, r: nz.r } });
+    // start at the fewest waves that already trace it, so the circles read as the shape just drawn
+    const i = stepFor(DRAW_PCT);
+    slider.value = String(i);
+    N = steps[i];
+    setN();
     drew(s, "Drawing");
   }
   cv.addEventListener("pointerup", end);
