@@ -1262,6 +1262,7 @@
     removeEventListener("resize", placeHint);
     done = true;
     snd.classList.remove("hinted");
+    bar.classList.remove("tipping");
     snd.removeAttribute("aria-describedby");
     hint.classList.remove("open");
     setTimeout(() => {
@@ -1281,6 +1282,7 @@
     hint.getBoundingClientRect();
     hint.classList.add("open");
     snd.classList.add("hinted");
+    bar.classList.add("tipping");
     snd.setAttribute("aria-describedby", "hint");
     addEventListener("pointerdown", hideHint, true);
     addEventListener("keydown", hintKey, true);

@@ -509,6 +509,22 @@ input[type="range"]::-moz-range-thumb {
 .hint-x:focus-visible {
   color: var(--ink);
 }
+/* on a phone the tip lies over the prompt: the placeholder and the arrow fade out while it is open, in step
+   with the tip, and back when it closes */
+@media (max-width: 600px) {
+  .ask input::placeholder {
+    transition: opacity 0.14s ease-out;
+  }
+  .go {
+    transition: opacity 0.14s ease-out;
+  }
+  .tipping .ask input::placeholder {
+    opacity: 0;
+  }
+  .tipping .go {
+    opacity: 0;
+  }
+}
 .snd.hinted {
   background: var(--chip);
   color: var(--ink);
