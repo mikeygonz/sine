@@ -225,6 +225,14 @@ with sync_playwright() as p:
         pg5.wait_for_selector("#key:not([hidden])", timeout=8000)
         sizes = pg5.evaluate("['key-t', 'gk'].map(i => getComputedStyle(document.getElementById(i)).fontSize).concat([getComputedStyle(document.querySelector('.key-n')).fontSize])")
         check(f"[{w}] one text size across the panel, and the footnote is muted", len(set(sizes)) == 1 and pg5.evaluate("getComputedStyle(document.querySelector('.key-n')).color") == "rgb(115, 115, 115)", sizes)
+        pn = pg5.evaluate("""(() => {
+          const r = s => document.querySelector(s).getBoundingClientRect(), k = r('#key'), n = document.querySelector('.key-n');
+          const kids = ['#key-t', '#gk', '.key-n'].map(s => Math.round((r(s).left - k.left) * 10) / 10);
+          return { bg: getComputedStyle(document.getElementById('key')).backgroundColor, lefts: kids, right: Math.round((k.right - r('#gk').right) * 10) / 10, text: n.textContent, link: n.querySelector('a').textContent, lines: Math.round(n.getBoundingClientRect().height / parseFloat(getComputedStyle(n).lineHeight)) };
+        })()""")
+        check(f"[{w}] the panel is solid #fafafa", pn["bg"] == "rgb(250, 250, 250)", pn)
+        check(f"[{w}] message, field and footnote share one 12px inset", pn["lefts"] == [13, 13, 13] and pn["right"] == 13, pn)
+        check(f"[{w}] the footnote copy is right, the link is on 'Get a key', one line", pn["text"] == "Saved in this tab only. Get a key" and pn["link"] == "Get a key" and pn["lines"] == 1, pn)
         kb = pg5.evaluate("(() => { const g = getComputedStyle(document.getElementById('gk')), a = getComputedStyle(document.getElementById('ask')); return [g.borderTopWidth + g.borderTopStyle + g.borderTopColor === a.borderTopWidth + a.borderTopStyle + a.borderTopColor, g.backgroundColor, document.getElementById('gk').getBoundingClientRect().height, document.getElementById('ask').getBoundingClientRect().height]; })()")
         check(f"[{w}] the key field has the prompt's border and height, and no fill", kb[0] and kb[1] == "rgba(0, 0, 0, 0)" and kb[2] == kb[3], kb)
     b2.close()
