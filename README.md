@@ -25,6 +25,7 @@ Every prompt spends the deployer's AI Gateway credits, so a public deploy lets a
 
 - `index.html`, `style.css`, `app.js`: the app
 - `api/`: the optional text-to-shape endpoint
+- `tools/`: dev-only scripts (share video, tracing a picture into a preset)
 - `og.png`, `apple-touch-icon.png`: share image and icon
 - `fonts/`: Geist and Geist Mono, under the SIL Open Font License (`fonts/OFL.txt`)
 
