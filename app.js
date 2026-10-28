@@ -1233,17 +1233,21 @@
   // Tab and modifiers move focus to the x without closing the hint; Escape and other keys close it
   const HINT_KEEP = ["Tab", "Shift", "Control", "Alt", "Meta", "CapsLock"];
   function hintKey(e) {
-    if (!HINT_KEEP.includes(e.key)) hideHint();
+    if (HINT_KEEP.includes(e.key)) return;
+    hideHint();
+    // typing brings the prompt back and lands in it
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !ask.hidden && document.activeElement === document.body) q.focus();
   }
   function placeHint() {
-    // a tooltip on the sound button: its caret sits over the button's center, and the note slides
-    // sideways, never past the bar, when the button is near an edge
+    // the tip takes the prompt's slot, bottom-aligned with it, and its caret sits over the sound button's
+    // center; it slides sideways, never past the bar, so on a phone it ends up flush right
     const b = bar.getBoundingClientRect(),
       s = snd.getBoundingClientRect(),
       mid = s.left + s.width / 2 - b.left,
-      left = Math.min(Math.max(0, mid - 24), Math.max(0, b.width - hint.offsetWidth));
+      left = Math.min(Math.max(0, mid - 24), Math.max(0, b.width - hint.offsetWidth)),
+      slot = ask.hidden ? null : ask.getBoundingClientRect(); // no prompt on this deploy: sit just above the controls
     hint.style.left = left + "px";
-    hint.style.setProperty("--hb", b.bottom - s.top + 9 + "px"); // phones lay the tip out in the flow instead
+    hint.style.setProperty("--hb", (slot ? b.bottom - slot.bottom : b.bottom - s.top + 9) + "px");
     hint.style.setProperty("--caret", mid - left + "px");
   }
   function hintCount() {
@@ -1268,6 +1272,7 @@
     removeEventListener("resize", placeHint);
     done = true;
     snd.classList.remove("hinted");
+    bar.classList.remove("tipping");
     snd.removeAttribute("aria-describedby");
     hint.classList.remove("open");
     setTimeout(() => {
@@ -1289,6 +1294,7 @@
     hint.getBoundingClientRect();
     hint.classList.add("open");
     snd.classList.add("hinted");
+    bar.classList.add("tipping");
     snd.setAttribute("aria-describedby", "hint");
     addEventListener("pointerdown", hideHint, true);
     addEventListener("keydown", hintKey, true);

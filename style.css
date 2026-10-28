@@ -509,34 +509,18 @@ input[type="range"]::-moz-range-thumb {
 .hint-x:focus-visible {
   color: var(--ink);
 }
-/* on a phone the tip takes its own row between the prompt and the controls: the prompt moves up to make
-   room, so the tip never covers the input or the presets, and the caret still points down at the sound button */
-@media (max-width: 600px) {
-  .ask {
-    order: 0;
-  }
-  .hint {
-    position: relative;
-    order: 1;
-    bottom: auto;
-    align-self: flex-start;
-    height: 34px;
-    box-sizing: border-box;
-    margin-top: -42px; /* closed: no room taken, the 8px gap above is cancelled too */
-    transform: none;
-    transition:
-      opacity 0.14s ease-out,
-      margin-top 0.18s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  .hint.open {
-    margin-top: 0;
-    transition:
-      opacity 0.24s cubic-bezier(0.23, 1, 0.32, 1),
-      margin-top 0.24s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  .row {
-    order: 2;
-  }
+/* while the tip is open it takes the prompt's place: the prompt fades out (and cannot be focused or tapped),
+   the tip sits in its slot bottom-aligned, caret down at the sound button, and the prompt fades back on close */
+.ask {
+  transition: opacity 0.14s ease-out;
+}
+.tipping .ask {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.14s ease-out,
+    visibility 0s 0.14s;
 }
 .snd.hinted {
   background: var(--chip);
@@ -742,15 +726,10 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
     transition: none !important;
   }
   /* the hint still fades, it just does not move */
+  /* the swap with the prompt is instant, nothing slides or fades */
   .hint,
   .hint.open {
     transform: none;
-    transition: opacity 0.2s ease-out !important;
-  }
-  @media (max-width: 600px) {
-    .hint {
-      transition: opacity 0.2s ease-out !important;
-    }
   }
   .snd.hinted {
     animation: none;
