@@ -77,11 +77,14 @@
         </button>
       </form>
       <div class="row">
-        <div class="seg" role="group" aria-label="Shape">
-          <button type="button" data-s="star" aria-pressed="true">Star</button>
-          <button type="button" data-s="heart" aria-pressed="false">Heart</button>
-          <button type="button" data-s="square" aria-pressed="false">Square</button>
-          <button type="button" id="saved" aria-expanded="false" aria-controls="shelf">Saved</button>
+        <div class="strip" id="strip">
+          <div class="seg" id="seg" role="group" aria-label="Shapes">
+            <button type="button" data-s="star" aria-pressed="true">Star</button>
+            <button type="button" data-s="heart" aria-pressed="false">Heart</button>
+            <button type="button" data-s="square" aria-pressed="false">Square</button>
+            <button type="button" class="keep" id="keep" hidden>Save</button>
+            <span id="list" class="mine"></span>
+          </div>
         </div>
         <button type="button" class="snd" id="snd" aria-pressed="false" aria-label="Sound">
           <svg
@@ -140,14 +143,6 @@
           <input id="n" type="range" min="0" max="19" step="1" value="4" aria-label="Waves" />
           <span class="out" id="out" aria-hidden="true"></span>
         </div>
-      </div>
-      <div class="pop shelf" id="shelf" role="group" aria-label="Saved shapes">
-        <form class="keep" id="keep" autocomplete="off" hidden>
-          <input id="name" type="text" maxlength="40" enterkeyhint="done" aria-label="Name" />
-          <button type="submit" class="save">Save</button>
-        </form>
-        <p class="none" id="none" hidden>Draw a shape to save it here.</p>
-        <ul class="list" id="list"></ul>
       </div>
       <div class="hint" id="hint" hidden><span id="hint-t" role="status" aria-live="polite"></span><button type="button" class="hint-x" id="hint-x" aria-label="Dismiss"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>
       <div class="pop tuner" id="tuner" role="group" aria-label="Sound">

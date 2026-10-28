@@ -233,7 +233,7 @@
     segBtns.forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.s === name)));
     custom = null;
     showing = null;
-    savedBtn.classList.remove("on");
+    renderSaved();
     born = Math.min(born, clock - period);
   }
 
@@ -593,7 +593,7 @@
   function promptStart(text) {
     cueOff();
     custom = null;
-    renderShelf();
+    renderSaved();
     live = { id: ++job, buf: "", pts: [], last: 0, text, fresh: true };
     go.disabled = true;
     status("drawing", true);
@@ -680,14 +680,13 @@
 
   // ---------- saved shapes ----------
   // Shapes you draw or type can be saved on this device (localStorage). Each one keeps its source
-  // points, normalized and rounded, and the wave count it was saved at.
+  // points, normalized and rounded, and the wave count it was saved at. They sit in the shape row
+  // after the presets; the row scrolls sideways and fades under a blur where it runs off.
   const KEY = "sine-shapes",
     MAX_PTS = 1200;
-  const savedBtn = document.getElementById("saved"),
-    shelf = document.getElementById("shelf"),
+  const seg = document.getElementById("seg"),
+    strip = document.getElementById("strip"),
     keep = document.getElementById("keep"),
-    nameEl = document.getElementById("name"),
-    noneEl = document.getElementById("none"),
     listEl = document.getElementById("list");
   let shapes = [];
   try {
@@ -714,7 +713,7 @@
   }
   function drew(pts, name) {
     custom = { pts: pts.slice(), name: fresh(name) };
-    renderShelf();
+    renderSaved();
   }
   function thumb(pts) {
     const step = Math.max(1, Math.floor(pts.length / 96));
@@ -726,55 +725,62 @@
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
   const esc = (t) =>
     t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  function renderShelf() {
+  function renderSaved() {
     keep.hidden = !custom;
-    if (custom && document.activeElement !== nameEl) nameEl.value = custom.name;
-    noneEl.textContent = "Draw a shape to save it here.";
-    noneEl.hidden = !!custom || shapes.length > 0;
     listEl.innerHTML = shapes
-      .map(
-        (x) =>
-          `<li><button type="button" class="item" data-id="${x.id}" aria-current="${x.id === showing}">${thumb(x.pts)}<span>${esc(x.name)}</span></button>` +
-          `<button type="button" class="del" data-id="${x.id}" aria-label="Delete ${esc(x.name)}">${X}<span class="confirm" aria-hidden="true">Confirm delete</span></button></li>`,
-      )
+      .map((x) => {
+        const on = x.id === showing;
+        return (
+          `<span class="chip"><button type="button" class="item" data-id="${x.id}" aria-current="${on}">${thumb(x.pts)}<span>${esc(x.name)}</span></button>` +
+          (on
+            ? `<button type="button" class="del" data-id="${x.id}" aria-label="Delete ${esc(x.name)}">${X}<span class="confirm" aria-hidden="true">Delete?</span></button>`
+            : "") +
+          "</span>"
+        );
+      })
       .join("");
-    savedBtn.classList.toggle("on", showing !== null);
+    fades();
   }
-  function openShelf(on) {
-    if (on) {
-      openTuner(false);
-      const b = bar.getBoundingClientRect(),
-        s = savedBtn.getBoundingClientRect();
-      shelf.style.transformOrigin = `${s.left + s.width / 2 - b.left}px 100%`;
-      renderShelf();
-    }
-    shelf.classList.toggle("open", on);
-    savedBtn.setAttribute("aria-expanded", String(on));
+  // the blur and fade show only on the side that has more to scroll to
+  function fades() {
+    const max = seg.scrollWidth - seg.clientWidth;
+    strip.classList.toggle("l", seg.scrollLeft > 1);
+    strip.classList.toggle("r", seg.scrollLeft < max - 1);
   }
-  savedBtn.addEventListener("click", () => openShelf(!shelf.classList.contains("open")));
-  keep.addEventListener("submit", (e) => {
-    e.preventDefault();
+  function reveal(el) {
+    const l = el.offsetLeft - 12,
+      r = el.offsetLeft + el.offsetWidth + 12;
+    if (l < seg.scrollLeft) seg.scrollTo({ left: l, behavior: RM ? "auto" : "smooth" });
+    else if (r > seg.scrollLeft + seg.clientWidth)
+      seg.scrollTo({ left: r - seg.clientWidth, behavior: RM ? "auto" : "smooth" });
+  }
+  seg.addEventListener("scroll", fades, { passive: true });
+  new ResizeObserver(fades).observe(seg);
+  keep.addEventListener("click", () => {
     if (!custom) return;
     const nz = normalize(custom.pts.length > MAX_PTS ? resample(custom.pts, MAX_PTS) : custom.pts).pts;
     const r = (v) => Math.round(v * 1000) / 1000;
     const x = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      name: nameEl.value.trim().slice(0, 40) || custom.name,
+      name: custom.name,
       pts: nz.map((p) => [r(p[0]), r(p[1])]),
       n: N,
     };
     shapes.unshift(x);
     if (!persist()) {
       shapes.shift();
-      nameEl.blur();
-      noneEl.textContent = "No room left. Delete a shape first.";
-      noneEl.hidden = false;
+      status("no room left, delete one first");
+      setTimeout(() => {
+        if (!live) status("");
+      }, 3200);
       return;
     }
     custom = null;
     showing = x.id;
-    renderShelf();
-    listEl.querySelector(".item").focus(); // focus follows the shape you just saved
+    renderSaved();
+    const chip = listEl.querySelector(".item");
+    chip.focus({ preventScroll: true });
+    reveal(chip.parentElement);
   });
   listEl.addEventListener("click", (e) => {
     const del = e.target.closest(".del"),
@@ -782,7 +788,6 @@
     if (del) {
       // two taps: the first arms it, the second deletes
       if (!del.classList.contains("armed")) {
-        for (const d of listEl.querySelectorAll(".armed")) disarm(d);
         del.classList.add("armed");
         del.dataset.label = del.getAttribute("aria-label");
         del.setAttribute("aria-label", "Confirm delete");
@@ -793,11 +798,11 @@
       const i = shapes.findIndex((x) => x.id === del.dataset.id);
       shapes.splice(i, 1);
       persist();
-      if (showing === del.dataset.id) showing = null;
-      renderShelf();
-      // focus moves to the row that took its place, else the one above, else back to Saved
-      const rows = listEl.querySelectorAll(".item");
-      (rows[Math.min(i, rows.length - 1)] || (keep.hidden ? savedBtn : nameEl)).focus();
+      showing = null;
+      renderSaved();
+      // focus moves to the chip that took its place, else the one before, else the first preset
+      const chips = listEl.querySelectorAll(".item");
+      (chips[Math.min(i, chips.length - 1)] || seg.querySelector("[data-s]")).focus();
     } else if (item) {
       const x = shapes.find((x) => x.id === item.dataset.id);
       if (!x) return;
@@ -809,8 +814,10 @@
         slider.value = String(i);
       }
       load(poly(x.pts), { morph: true });
-      openShelf(false);
-      renderShelf();
+      renderSaved();
+      const chip = listEl.querySelector('.item[aria-current="true"]');
+      chip.focus({ preventScroll: true });
+      reveal(chip.parentElement);
     }
   });
   function disarm(d) {
@@ -1137,7 +1144,6 @@
     expand.textContent = on ? "Less" : "More";
   }
   function openTuner(on) {
-    if (on) openShelf(false);
     tuner.classList.toggle("open", on);
     tuneBtn.setAttribute("aria-expanded", String(on));
     if (!on) fullTuner(false);
@@ -1169,23 +1175,15 @@
     if (tuner.classList.contains("open")) {
       openTuner(false);
       tuneBtn.focus();
-    } else if (shelf.classList.contains("open")) {
-      openShelf(false);
-      savedBtn.focus();
     }
   });
   // a tap outside an open panel closes it, and does not also start a drawing
   addEventListener(
     "pointerdown",
     (e) => {
-      const open = tuner.classList.contains("open")
-        ? [tuner, tuneBtn]
-        : shelf.classList.contains("open")
-          ? [shelf, savedBtn]
-          : null;
-      if (!open || open.some((el) => el.contains(e.target))) return;
+      if (!tuner.classList.contains("open")) return;
+      if (tuner.contains(e.target) || tuneBtn.contains(e.target)) return;
       openTuner(false);
-      openShelf(false);
       if (e.target === cv) {
         e.stopPropagation();
         e.preventDefault();
@@ -1282,7 +1280,7 @@
     layout();
     slider.style.setProperty("--p", "0%");
     load(SHAPES.star(), { fresh: true });
-    renderShelf();
+    renderSaved();
     let last = performance.now();
     function loop(now) {
       const dt = Math.min(50, now - last);
