@@ -344,8 +344,10 @@
     cueA = 0;
   const cueOff = () => (cueOn = false);
   function cue() {
-    const { R, cx, cy } = L;
-    const y = Math.min(cy + R * 0.82 + 34, bar.getBoundingClientRect().top - 24); // just under the star
+    const { R, cy } = L,
+      cx = W / 2; // centered on the canvas, also beside the wave on wide screens
+    // just under the shape; on a wide screen the wave runs right of the circles, so go below it too
+    const y = Math.min(L.side ? cy + R + 26 : cy + R * 0.82 + 34, bar.getBoundingClientRect().top - 24);
     ctx.font = "13px Geist, ui-sans-serif, system-ui, sans-serif";
     ctx.textBaseline = "middle";
     const tw = ctx.measureText("Draw here").width,
