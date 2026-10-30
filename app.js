@@ -334,8 +334,35 @@
   }
 
   // ---------- draw ----------
-  const INK = "26,26,26",
-    ARMS = 160;
+  const ARMS = 160;
+  const pal = { ink: "", cue: "", ghost: "", axis: "", bg: "" };
+  const themeBtn = document.getElementById("theme");
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  function readPalette() {
+    const cs = getComputedStyle(document.documentElement),
+      v = (k) => cs.getPropertyValue(k).trim();
+    pal.ink = v("--ink-rgb");
+    pal.cue = v("--cue-rgb");
+    pal.ghost = v("--ghost");
+    pal.axis = v("--axis");
+    pal.bg = v("--bg");
+    dirty = true;
+  }
+  function setTheme(next, save) {
+    document.documentElement.setAttribute("data-theme", next);
+    if (save)
+      try {
+        localStorage.setItem("sine-theme", next);
+      } catch (e) {}
+    if (themeMeta) themeMeta.setAttribute("content", next === "light" ? "#fafafa" : "#111111");
+    const label = next === "light" ? "Dark mode" : "Light mode";
+    themeBtn.setAttribute("aria-label", label);
+    themeBtn.setAttribute("title", label);
+    readPalette();
+  }
+  themeBtn.addEventListener("click", () => {
+    setTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light", true);
+  });
   let stroke = null,
     cursor = null;
   // "Draw here": on first load, a faint pen loops beside the words under the shape, until the
@@ -351,7 +378,7 @@
     const tw = ctx.measureText("Draw here").width,
       lw = RM ? 0 : 30,
       x0 = cx - (lw + tw) / 2;
-    ctx.fillStyle = `rgba(115,115,115,${cueA})`;
+    ctx.fillStyle = `rgba(${pal.cue},${cueA})`;
     ctx.fillText("Draw here", x0 + lw, y);
     if (RM) return;
     // a figure eight, with a tail that fades behind the pen
@@ -363,13 +390,13 @@
     for (let k = 0; k < K; k++) {
       const a = th - (k / K) * 3.6,
         b = th - ((k + 1) / K) * 3.6;
-      ctx.strokeStyle = `rgba(115,115,115,${cueA * 0.55 * (1 - k / K)})`;
+      ctx.strokeStyle = `rgba(${pal.cue},${cueA * 0.55 * (1 - k / K)})`;
       ctx.beginPath();
       ctx.moveTo(px(a), py(a));
       ctx.lineTo(px(b), py(b));
       ctx.stroke();
     }
-    ctx.fillStyle = `rgba(115,115,115,${cueA})`;
+    ctx.fillStyle = `rgba(${pal.cue},${cueA})`;
     ctx.beginPath();
     ctx.arc(px(th), py(th), 2.5, 0, TAU);
     ctx.fill();
@@ -411,7 +438,7 @@
     const { R, cx, cy, w0, w1, wy, A, side } = L;
     if (cueA > 0) cue();
     if (stroke) {
-      ctx.strokeStyle = `rgb(${INK})`;
+      ctx.strokeStyle = `rgb(${pal.ink})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
       stroke.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
@@ -431,7 +458,7 @@
       gy = gx.a.cy + (cy - gx.a.cy) * e;
       gr = gx.a.r + (R - gx.a.r) * e;
     }
-    ctx.strokeStyle = "#e2e2e2";
+    ctx.strokeStyle = pal.ghost;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     target.forEach((p, i) =>
@@ -448,7 +475,7 @@
       const u0 = t - (tail * (c + 1)) / CH,
         u1 = t - (tail * c) / CH,
         a = RM ? 1 : 0.12 + 0.88 * Math.pow(1 - c / CH, 1.4);
-      ctx.strokeStyle = `rgba(${INK},${a})`;
+      ctx.strokeStyle = `rgba(${pal.ink},${a})`;
       ctx.beginPath();
       for (let k = 0; k <= per; k++) {
         const p = at(u0 + ((u1 - u0) * k) / per);
@@ -477,13 +504,13 @@
       if (i < ARMS) {
         const r = Math.hypot(dx, dy);
         if (r > 1.5) {
-          ctx.strokeStyle = `rgba(${INK},${0.09 * k})`;
+          ctx.strokeStyle = `rgba(${pal.ink},${0.09 * k})`;
           ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.arc(x, y, r, 0, TAU);
           ctx.stroke();
         }
-        ctx.strokeStyle = `rgba(${INK},${0.38 * k})`;
+        ctx.strokeStyle = `rgba(${pal.ink},${0.38 * k})`;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(x, y);
@@ -498,7 +525,7 @@
     if (span > 60) {
       const len = RM ? 1 : age,
         n = Math.max(2, Math.floor(span / 2));
-      ctx.strokeStyle = "#ececec";
+      ctx.strokeStyle = pal.axis;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(w0, wy);
@@ -506,7 +533,7 @@
       ctx.stroke();
       if (side) {
         ctx.setLineDash([2, 4]);
-        ctx.strokeStyle = `rgba(${INK},.28)`;
+        ctx.strokeStyle = `rgba(${pal.ink},.28)`;
         ctx.beginPath();
         ctx.moveTo(x, y);
         ctx.lineTo(w0, y);
@@ -518,7 +545,7 @@
       ctx.lineWidth = 1.5;
       for (let c = 0; c < segs; c++) {
         const a = RM ? 1 : 0.15 + 0.85 * (1 - c / segs);
-        ctx.strokeStyle = `rgba(${INK},${a})`;
+        ctx.strokeStyle = `rgba(${pal.ink},${a})`;
         ctx.beginPath();
         for (let k = 0; k <= m; k++) {
           const v = ((c + k / m) / segs) * len;
@@ -534,11 +561,11 @@
     if (!side && span > 60) dot(w0, wy + at(t)[1] * A);
   }
   function dot(x, y) {
-    ctx.fillStyle = `rgb(${INK})`;
+    ctx.fillStyle = `rgb(${pal.ink})`;
     ctx.beginPath();
     ctx.arc(x, y, 3.5, 0, TAU);
     ctx.fill();
-    ctx.strokeStyle = "#fafafa";
+    ctx.strokeStyle = pal.bg;
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.beginPath();
@@ -1313,6 +1340,7 @@
       start();
     });
   function start() {
+    setTheme(document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark", false);
     layout();
     slider.style.setProperty("--p", "0%");
     load(SHAPES.star(), { fresh: true });
