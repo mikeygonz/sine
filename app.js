@@ -220,9 +220,14 @@
     if (RM) w.set(wt);
     dirty = true;
     audioUpdate();
+    if (clip) {
+      clip.shown = "";
+      clearTimeout(clip.redo);
+      clip.redo = setTimeout(clipSound, 120);
+    }
   }
   function load(pts, opts = {}) {
-    if (!opts.clip) clipOff();
+    clipOff();
     const next = dft(pts);
     if (to && opts.morph && !RM) {
       from = { re: Float64Array.from(cre), im: Float64Array.from(cim) };
@@ -378,6 +383,7 @@
   function frame(dt) {
     clock += dt;
     cueA = cueOn && clock > 400 ? Math.min(1, cueA + dt / 500) : cueOn ? 0 : Math.max(0, cueA - dt / 200);
+    if (clip) clipTick();
     if (!RM) t = (t + dt / period) % 1;
     let moving = false;
     if (morph < 1) {
@@ -432,7 +438,7 @@
       gy = gx.a.cy + (cy - gx.a.cy) * e;
       gr = gx.a.r + (R - gx.a.r) * e;
     }
-    ctx.strokeStyle = "#e2e2e2";
+    ctx.strokeStyle = clip ? "#ececec" : "#e2e2e2";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     target.forEach((p, i) =>
@@ -475,7 +481,7 @@
         s = Math.sin(f * th);
       const dx = k * (cre[j] * c - cim[j] * s) * R,
         dy = k * (cre[j] * s + cim[j] * c) * R;
-      if (i < ARMS) {
+      if (i < ARMS && !(clip && f > SYN.H)) {
         const r = Math.hypot(dx, dy);
         if (r > 1.5) {
           ctx.strokeStyle = `rgba(${INK},${0.09 * k})`;
@@ -615,6 +621,7 @@
   });
   const PT = /^\s*(\d{1,4})\s*,\s*(\d{1,4})\s*$/;
   function promptStart(text) {
+    clipOff();
     cueOff();
     custom = null;
     renderSaved();
@@ -664,7 +671,7 @@
     if (ok) {
       apply(true);
       status("");
-    } else status(err === "limit" ? "too many, try later" : live.sound ? "couldn’t make that sound" : "couldn’t draw that");
+    } else status(err === "limit" ? "too many, try later" : live.sound ? "couldn’t find that sound" : "couldn’t draw that");
     if (!ok)
       setTimeout(() => {
         if (!live) status("");
@@ -681,7 +688,7 @@
     const id = job;
     if (SOUNDY.test(text)) {
       live.sound = true;
-      status("making the sound", true);
+      status("finding the sound", true);
       if (!soundOn()) snd.click();
       hear(text, id);
       return;
@@ -709,7 +716,239 @@
     }
   });
 
+    const SYN = { H: 48, TOP: 7500, HOP: 5, SR: 16000, NZ: 0.5, AW: 6, VIS: 300, REST: 1200 };
+  const phaseOf = (h) => (h * h * 0.618 + h * 0.9) % TAU;
+  const mix = (a, b, u) => a + (b - a) * u;
+  function down(x, sr) {
+    const r = sr / SYN.SR,
+      k = Math.max(1, Math.round(r)),
+      n = Math.floor(x.length / r),
+      y = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const c = Math.floor(i * r);
+      let s = 0,
+        m = 0;
+      for (let j = c - (k >> 1); j <= c + (k >> 1); j++)
+        if (j >= 0 && j < x.length) {
+          s += x[j];
+          m++;
+        }
+      y[i] = s / (m || 1);
+    }
+    return y;
+  }
+  function analyze(raw, sr, maxMs) {
+    const x = down(raw, sr),
+      R = SYN.SR,
+      hop = (R * SYN.HOP) / 1000,
+      win = Math.round(R * 0.03),
+      nf = Math.max(0, Math.floor((x.length - win) / hop)),
+      env = new Float64Array(nf);
+    for (let f = 0; f < nf; f++) {
+      let s = 0;
+      for (let i = 0; i < hop; i++) s += x[f * hop + i] ** 2;
+      env[f] = s;
+    }
+    const W = Math.min(nf, Math.round(maxMs / SYN.HOP));
+    let best = 0,
+      acc = 0,
+      at = 0;
+    for (let f = 0; f < nf; f++) {
+      acc += env[f];
+      if (f >= W) acc -= env[f - W];
+      if (f >= W - 1 && acc > best) {
+        best = acc;
+        at = f - W + 1;
+      }
+    }
+    let peak = 0;
+    for (let f = at; f < at + W; f++) peak = Math.max(peak, env[f]);
+    let a = at,
+      b = at + W - 1;
+    while (a < b && env[a] < peak * 0.004) a++;
+    while (b > a && env[b] < peak * 0.004) b--;
+    const hw = new Float64Array(win);
+    let hs = 0;
+    for (let i = 0; i < win; i++) hs += hw[i] = 0.5 - 0.5 * Math.cos((TAU * i) / (win - 1));
+    const lo = Math.floor(R / 1600),
+      hi = Math.ceil(R / 70),
+      frames = [];
+    let last = 200;
+    for (let f = a; f <= b; f++) {
+      const o = f * hop;
+      const seg = x.subarray(o, o + win);
+      const sw = new Float64Array(win);
+      for (let i = 0; i < win; i++) sw[i] = seg[i] * hw[i];
+      const r = new Float64Array(hi + 2);
+      let r0 = 1e-12;
+      for (let i = 0; i < win; i++) r0 += sw[i] * sw[i];
+      let k = lo;
+      for (let j = lo; j <= hi + 1; j++) {
+        let s = 0;
+        for (let i = 0; i + j < win; i++) s += sw[i] * sw[i + j];
+        r[j] = s / r0;
+        if (j <= hi && r[j] > r[k]) k = j;
+      }
+      const d = (r[k - 1] - r[k + 1]) / (2 * (r[k - 1] - 2 * r[k] + r[k + 1]) || 1);
+      const voiced = Math.max(0, r[k]);
+      const hz = voiced > 0.3 ? R / (k + (Math.abs(d) < 1 ? d : 0)) : last;
+      last = hz;
+      const am = new Float32Array(SYN.H + 1);
+      let he = 0;
+      const aw = Math.min(win, Math.max(Math.round(R * 0.01), Math.round((SYN.AW * R) / hz))),
+        off = (win - aw) >> 1;
+      let as = 0;
+      const ah = new Float64Array(aw);
+      for (let i = 0; i < aw; i++) as += ah[i] = 0.5 - 0.5 * Math.cos((TAU * i) / (aw - 1));
+      for (let h = 1; h <= SYN.H && h * hz < SYN.TOP; h++) {
+        const w = (TAU * h * hz) / R;
+        let re = 0,
+          im = 0;
+        for (let i = 0; i < aw; i++) {
+          const v = seg[off + i] * ah[i];
+          re += v * Math.cos(w * i);
+          im -= v * Math.sin(w * i);
+        }
+        am[h] = (2 * Math.hypot(re, im)) / as;
+        he += am[h] * am[h] / 2;
+      }
+      let ms = 0;
+      for (let i = 0; i < win; i++) ms += (seg[i] * hw[i]) ** 2;
+      ms /= hs * hs / win;
+      const sv = Math.sqrt(voiced);
+      for (let h = 1; h <= SYN.H; h++) am[h] *= sv;
+      frames.push({ hz, a: am, n: Math.sqrt(Math.max(0, ms - he * voiced)) * SYN.NZ });
+    }
+    const hz = frames.map((q) => q.hz);
+    frames.forEach((q, i) => {
+      const s = hz.slice(Math.max(0, i - 2), i + 3).sort((p, r) => p - r);
+      q.hz = q.hz;
+    });
+    return frames;
+  }
+  function frameAt(c, ms) {
+    const F = c.frames,
+      p = Math.max(0, Math.min(F.length - 1, ms / SYN.HOP)),
+      i = Math.min(F.length - 2, Math.floor(p)),
+      u = F.length > 1 ? p - i : 0,
+      A = F[i],
+      B = F[i + 1] || A;
+    return { hz: A.hz * (B.hz / A.hz) ** u, a: A.a.map((v, h) => v + (B.a[h] - v) * u), n: A.n + (B.n - A.n) * u };
+  }
+  function render(c, sr, keep, nk) {
+    const F = c.frames,
+      hop = (sr * SYN.HOP) / 1000,
+      n = Math.floor((F.length - 1) * hop),
+      gapN = Math.round((c.gap / 1000) * sr),
+      one = new Float32Array(n),
+      out = new Float32Array(n * c.repeat + gapN * (c.repeat - 1) + Math.round((SYN.REST / 1000) * sr)),
+      ph = Array.from({ length: SYN.H + 1 }, (_, h) => phaseOf(h));
+    for (const q of F) {
+      let e = 0,
+        m = 0;
+      for (let h = 1; h <= SYN.H; h++) {
+        e += q.a[h] * q.a[h];
+        m += q.a[h] * q.a[h] * h * q.hz;
+      }
+      q.c = e > 0 ? m / e : 1000;
+    }
+    let p = 0,
+      seed = 9,
+      z1 = 0,
+      z2 = 0;
+    for (let f = 0; f < F.length - 1; f++) {
+      const A = F[f],
+        B = F[f + 1];
+      for (let j = 0; j < hop; j++) {
+        const u = j / hop,
+          hz = A.hz * (B.hz / A.hz) ** u;
+        p += (TAU * hz) / sr;
+        let v = 0;
+        for (let h = 1; h <= SYN.H; h++) {
+          if (keep && !keep[h]) continue;
+          const a = A.a[h] + (B.a[h] - A.a[h]) * u;
+          if (a > 1e-6 && h * hz < sr * 0.45) v += a * Math.sin(h * p + ph[h]);
+        }
+        seed = (seed * 16807) % 2147483647;
+        const w = seed / 1073741823.5 - 1;
+        const fc = 2 * Math.sin((Math.PI * Math.min(A.c, sr * 0.2)) / sr);
+        const hp = w - z2 - 1.4 * z1;
+        z1 += fc * hp;
+        z2 += fc * z1;
+        v += (A.n + (B.n - A.n) * u) * z1 * 1.2 * nk;
+        one[Math.floor(f * hop) + j] = v;
+      }
+    }
+    let pk = 1e-9;
+    for (const v of one) pk = Math.max(pk, Math.abs(v));
+    const g = 0.9 / pk;
+    for (let r = 0; r < c.repeat; r++) for (let i = 0; i < n; i++) out[r * (n + gapN) + i] = one[i] * g;
+    return out;
+  }
+    function wobble(x) {
+    const i = Math.floor(x),
+      u = x - i,
+      r = (k) => {
+        const s = Math.sin(k * 127.1 + 311.7) * 43758.5453;
+        return (s - Math.floor(s)) * 2 - 1;
+      };
+    return mix(r(i), r(i + 1), u * u * (3 - 2 * u));
+  }
+  function synthAt(c, ms) {
+    const K = c.keys;
+    let i = 0;
+    while (i < K.length - 2 && ms > K[i + 1].t) i++;
+    const a = K[i],
+      b = K[i + 1] || a,
+      u = b.t > a.t ? Math.max(0, Math.min(1, (ms - a.t) / (b.t - a.t))) : 0,
+      s = ms / 1000;
+    let hz = a.hz * (b.hz / a.hz) ** u;
+    hz *= 2 ** ((c.vibrato[1] / 12) * Math.sin(TAU * c.vibrato[0] * s) + (c.jitter * 0.6 * wobble(s * 35)) / 12);
+    const vol = mix(a.vol, b.vol, u) * (1 - c.growl * 0.45 * (0.5 + 0.5 * Math.sin(TAU * 38 * s)));
+    return {
+      hz,
+      vol: Math.max(0, vol),
+      noise: mix(a.noise, b.noise, u),
+      tilt: mix(a.tilt, b.tilt, u),
+      odd: mix(a.odd, b.odd, u),
+      f: a.f.map((v, k) => mix(v, b.f[k], u)),
+    };
+  }
+  function synthAmps(st, out, keep) {
+    let e = 0;
+    for (let h = 1; h <= SYN.H; h++) {
+      const fr = h * st.hz;
+      let g = 0;
+      if (fr < SYN.TOP && (!keep || keep[h])) {
+        g = h ** -st.tilt * (h % 2 ? 1 : 1 - st.odd);
+        if (st.f.length) {
+          let fl = 0.06;
+          st.f.forEach((F, k) => {
+            const B = Math.max(90, F * 0.15);
+            fl += [1, 0.7, 0.45][k] / (1 + ((fr - F) / (B / 2)) ** 2);
+          });
+          g *= fl;
+        }
+      }
+      out[h] = g;
+      e += g * g;
+    }
+    const k = e > 0 ? (st.vol * 0.3) / Math.sqrt(e / 2) : 0;
+    for (let h = 1; h <= SYN.H; h++) out[h] *= k;
+    return out;
+  }
+  function recipeFrames(c) {
+    const len = c.keys[c.keys.length - 1].t,
+      frames = [];
+    for (let ms = 0; ms <= len + SYN.HOP; ms += SYN.HOP) {
+      const st = synthAt(c, ms);
+      frames.push({ hz: st.hz, a: synthAmps(st, new Float32Array(SYN.H + 1)), n: st.vol * st.noise * 0.3 });
+    }
+    return frames;
+  }
+
   const SOUNDY = /\b(sound|sounds|noise)\b/i;
+  let clip = null;
   async function hear(text, id) {
     try {
       const r = await fetch("/api/sound", {
@@ -720,14 +959,215 @@
       if (id !== job) return;
       if (!r.ok) return promptEnd(r.status === 429 ? "limit" : "fail");
       const v = await r.json();
+      let c = null;
+      if (v.recording) {
+        const b = await (await fetch(v.recording.src)).arrayBuffer();
+        let au;
+        try {
+          au = await new OfflineAudioContext(1, 1, SYN.SR).decodeAudioData(
+            b.slice(0),
+          );
+        } catch (_) {
+          au = await ac.decodeAudioData(b);
+        }
+        c = {
+          frames: analyze(au.getChannelData(0), au.sampleRate, 2500),
+          repeat: 1,
+          gap: 0,
+          credit: v.recording,
+        };
+      } else if (v.recipe)
+        c = {
+          frames: recipeFrames(v.recipe),
+          repeat: v.recipe.repeat,
+          gap: v.recipe.gap,
+        };
       if (id !== job) return;
-      if (!v || !Array.isArray(v.parts) || !v.parts.length) return promptEnd("fail");
+      if (!c || c.frames.length < 6) return promptEnd("fail");
       live = null;
-      status("");
       go.disabled = !q.value.trim();
-      startClip(v);
+      startClip(c);
     } catch (_) {
       if (id === job) promptEnd("fail");
+    }
+  }
+  function clipPts(st, S) {
+    const pts = new Array(M);
+    for (let n = 0; n < M; n++) {
+      const th = (TAU * n) / M;
+      let x = 0,
+        y = 0;
+      for (let h = 1; h <= SYN.H; h++) {
+        const a = st.a[h] * S;
+        if (!a) continue;
+        x += a * Math.cos(h * th + phaseOf(h));
+        y += a * Math.sin(h * th + phaseOf(h));
+      }
+      pts[n] = [x, y];
+    }
+    return pts;
+  }
+  function startClip(c) {
+    clipOff();
+    pick("yours");
+    c.len = (c.frames.length - 1) * SYN.HOP;
+    c.cycle = c.len + c.gap;
+    c.total = c.repeat * c.cycle - c.gap;
+    let top = 0,
+      peak = c.frames[0],
+      mean = new Float64Array(2 * SYN.H + 1);
+    for (const f of c.frames) {
+      let s = 0;
+      for (let h = 1; h <= SYN.H; h++) {
+        s += f.a[h];
+        mean[h] += f.a[h];
+      }
+      for (let h = SYN.H + 1; h <= 2 * SYN.H; h++)
+        mean[h] += f.n * 1e-3 + 1e-12;
+      if (s > top) {
+        top = s;
+        peak = f;
+      }
+    }
+    c.S = 0.95 / (top || 1);
+    c.t0 = clock;
+    c.shown = "";
+    if (N < DRAW_N) {
+      N = DRAW_N;
+      slider.value = String(steps.indexOf(N));
+    }
+    clip = c;
+    from = null;
+    morph = 1;
+    gx = { a: null, t: 1 };
+    target = clipPts(peak, c.S);
+    to = { re: new Float64Array(M), im: new Float64Array(M) };
+    for (let h = 1; h <= 2 * SYN.H; h++) {
+      to.re[h] = (mean[h] / c.frames.length) * Math.cos(phaseOf(h));
+      to.im[h] = (mean[h] / c.frames.length) * Math.sin(phaseOf(h));
+    }
+    cre.fill(0);
+    cim.fill(0);
+    born = clock - 1e6;
+    setOrder();
+    setN();
+    clearTimeout(c.redo);
+    if (c.credit) {
+      const a = document.createElement("a");
+      a.href = c.credit.page;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = "Rebuilt from a recording";
+      a.title = `${c.credit.title}, by ${c.credit.artist || "unknown"}, ${c.credit.license}, Wikimedia Commons`;
+      status("");
+      statusEl.append(a);
+    } else {
+      status("No recording found, made from scratch");
+      setTimeout(() => clip === c && status(""), 4000);
+    }
+    mute(true);
+    clipSound();
+  }
+  const clipLevel = () => (level() / 0.24) * 0.6;
+  function mute(on) {
+    if (!ac || !env) return;
+    const n = ac.currentTime;
+    env.gain.cancelScheduledValues(n);
+    env.gain.setTargetAtTime(
+      on ? 0 : tune.notes === "pluck" ? SUSTAIN : 1,
+      n,
+      0.03,
+    );
+  }
+  function clipStop() {
+    if (!clip || !clip.src) return;
+    try {
+      clip.src.stop();
+    } catch (_) {}
+    clip.src.disconnect();
+    clip.src = null;
+  }
+  function clipOff() {
+    if (!clip) return;
+    clipStop();
+    clearTimeout(clip.redo);
+    if (clip.g) clip.g.disconnect();
+    if (statusEl.querySelector("a") || clip.credit === undefined) status("");
+    clip = null;
+    mute(false);
+    setN();
+  }
+  function clipSound() {
+    if (!clip) return;
+    const c = clip,
+      run = c.total + SYN.REST,
+      pos = clipPos();
+    clipStop();
+    if (!ac || !soundOn()) return;
+    const keep = new Uint8Array(SYN.H + 1);
+    let nk = 0;
+    for (let h = 1; h <= 2 * SYN.H; h++)
+      if (wt[h] === 1) {
+        if (h <= SYN.H) keep[h] = 1;
+        else nk++;
+      }
+    const key = keep.join("") + nk;
+    if (c.key !== key || !c.buf) {
+      const data = render(c, ac.sampleRate, keep, nk / SYN.H);
+      c.buf = ac.createBuffer(1, data.length, ac.sampleRate);
+      c.buf.getChannelData(0).set(data);
+      c.key = key;
+    }
+    if (!c.g) {
+      c.g = ac.createGain();
+      c.g.gain.value = clipLevel();
+      c.g.connect(master.mix);
+    }
+    const src = ac.createBufferSource();
+    src.buffer = c.buf;
+    src.loop = true;
+    src.connect(c.g);
+    const off = (((pos % run) + run) % run) / 1000;
+    c.at = ac.currentTime + 0.03 - off;
+    src.start(ac.currentTime + 0.03, Math.min(off, c.buf.duration - 0.01));
+    c.src = src;
+  }
+  function clipPos() {
+    const c = clip;
+    if (c.src && ac)
+      return (ac.currentTime - c.at - (ac.outputLatency || 0)) * 1000;
+    return clock - c.t0;
+  }
+  function clipTick() {
+    const c = clip,
+      run = c.total + SYN.REST,
+      pos = (((clipPos() % run) + run) % run) | 0,
+      r = Math.floor(pos / c.cycle),
+      w = pos - r * c.cycle,
+      st = pos < c.total && w <= c.len ? frameAt(c, w) : null;
+    for (let h = 1; h <= 2 * SYN.H; h++) cre[h] = cim[h] = 0;
+    let size = 0;
+    if (st) {
+      for (let h = 1; h <= SYN.H; h++) {
+        const a = st.a[h] * c.S;
+        size += a;
+        cre[h] = a * Math.cos(phaseOf(h));
+        cim[h] = a * Math.sin(phaseOf(h));
+      }
+      const k = st.n * c.S * Math.sqrt(2 / SYN.H);
+      for (let h = SYN.H + 1; h <= 2 * SYN.H; h++) {
+        cre[h] = k * (Math.random() * 2 - 1);
+        cim[h] = k * (Math.random() * 2 - 1);
+      }
+      period = (1000 * SYN.VIS) / st.hz;
+    }
+    dirty = true;
+    const txt =
+      `<b>${N}</b> ${N === 1 ? "wave" : "waves"}` +
+      (size > 0.06 ? ` · ${Math.round(st.hz)} Hz` : "");
+    if (txt !== c.shown) {
+      c.shown = txt;
+      out.innerHTML = txt;
     }
   }
 
@@ -916,7 +1356,7 @@
     const re = new Float32Array(HMAX + 1),
       im = new Float32Array(HMAX + 1),
       n = Math.min(N, order.length);
-    const cap = clip || tune.overtones >= 64 ? HMAX : tune.overtones; // overtones: how many of the circles' harmonics are heard
+    const cap = tune.overtones >= 64 ? HMAX : tune.overtones; // overtones: how many of the circles' harmonics are heard
     for (let i = 0; i < n; i++) {
       const j = order[i],
         f = freq(j),
@@ -952,6 +1392,7 @@
     // master gain -> warmth -> dry + room -> panner when there is one -> limiter
     const master = ac.createGain();
     master.gain.value = 0;
+    const mix = ac.createGain();
     const warm = ac.createBiquadFilter();
     warm.type = "lowpass";
     warm.frequency.value = cutoff();
@@ -962,7 +1403,7 @@
     wet.gain.value = (tune.room / 100) * 0.8;
     master.warm = warm;
     master.wet = wet; // handles for the tuner
-    const mix = ac.createGain();
+    master.mix = mix;
     master.connect(warm);
     warm.connect(mix);
     warm.connect(verb);
@@ -1060,157 +1501,6 @@
     }
     voice = { o, g };
   }
-  let clip = null,
-    clipTimers = [],
-    clipNodes = [],
-    noiseBuf = null;
-  const phase = (h) => (h * h * 0.618 + h * 0.9) % TAU;
-  function clipShape(harm, size) {
-    const pts = new Array(M);
-    let r = 0;
-    for (let n = 0; n < M; n++) {
-      const th = (TAU * n) / M;
-      let x = 0,
-        y = 0;
-      for (let i = 0; i < harm.length; i++) {
-        const h = i + 1,
-          a = harm[i] / h ** 0.35,
-          p = phase(h);
-        x += a * Math.cos(h * th + p);
-        y += a * Math.sin(h * th + p);
-      }
-      pts[n] = [x, y];
-      r = Math.max(r, Math.hypot(x, y));
-    }
-    const k = size / (r || 1);
-    return pts.map(([x, y]) => [x * k, y * k]);
-  }
-  function startClip(v) {
-    clipOff();
-    const peak = Math.max(0.01, ...v.parts.map((p) => Math.max(p.vol[0], p.vol[1])));
-    const shapes = v.parts.map((p) => clipShape(p.harm, 0.25 + (0.75 * Math.max(p.vol[0], p.vol[1])) / peak));
-    let loud = 0;
-    v.parts.forEach((p, i) => {
-      if (Math.max(p.vol[0], p.vol[1]) > Math.max(...v.parts[loud].vol)) loud = i;
-    });
-    pick("yours");
-    if (N < DRAW_N) {
-      N = DRAW_N;
-      slider.value = String(steps.indexOf(N));
-    }
-    clip = { ...v, shapes, rest: clipShape(v.parts[loud].harm, 1) };
-    load(clip.rest, { morph: true, dur: 600, clip: true });
-    mute(true);
-    clipTimers.push(setTimeout(playClip, 650));
-  }
-  function mute(on) {
-    if (!ac || !env) return;
-    const n = ac.currentTime;
-    env.gain.cancelScheduledValues(n);
-    env.gain.setTargetAtTime(on ? 0 : tune.notes === "pluck" ? SUSTAIN : 1, n, 0.03);
-  }
-  function clipStop() {
-    clipTimers.forEach(clearTimeout);
-    clipTimers = [];
-    const n = ac ? ac.currentTime : 0;
-    for (const x of clipNodes) {
-      try {
-        if (x.gain) {
-          x.gain.cancelScheduledValues(n);
-          x.gain.setTargetAtTime(0, n, 0.01);
-        } else x.stop(n + 0.05);
-      } catch (_) {}
-    }
-    clipNodes = [];
-  }
-  function clipOff() {
-    if (!clip) return;
-    clipStop();
-    clip = null;
-    mute(false);
-  }
-  function clipWave(harm) {
-    const keep = harm
-      .map((a, i) => [a, i + 1])
-      .sort((a, b) => b[0] - a[0])
-      .slice(0, Math.max(1, Math.min(N, harm.length)));
-    const re = new Float32Array(harm.length + 1),
-      im = new Float32Array(harm.length + 1);
-    for (const [a, h] of keep) {
-      re[h] = a * Math.sin(phase(h));
-      im[h] = a * Math.cos(phase(h));
-    }
-    return ac.createPeriodicWave(re, im);
-  }
-  function playClip() {
-    if (!clip || !ac || !soundOn()) return;
-    clipStop();
-    const c = clip,
-      t0 = ac.currentTime + 0.05,
-      len = c.parts.reduce((s, p) => s + p.ms, 0) / 1000,
-      out = ac.createGain();
-    out.gain.value = 0.9;
-    out.connect(master);
-    if (!noiseBuf) {
-      noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      let s = 11;
-      for (let i = 0; i < d.length; i++) {
-        s = (s * 16807) % 2147483647;
-        d[i] = s / 1073741823.5 - 1;
-      }
-    }
-    const nz = ac.createBufferSource(),
-      bp = ac.createBiquadFilter(),
-      ng = ac.createGain();
-    nz.buffer = noiseBuf;
-    nz.loop = true;
-    bp.type = "bandpass";
-    bp.frequency.value = c.noiseHz;
-    bp.Q.value = 0.9;
-    ng.gain.value = 0;
-    nz.connect(bp);
-    bp.connect(ng);
-    ng.connect(out);
-    nz.start(t0);
-    const end = t0 + c.repeat * len + (c.repeat - 1) * (c.gap / 1000);
-    nz.stop(end + 0.1);
-    clipNodes.push(nz, ng, out);
-    for (let r = 0; r < c.repeat; r++) {
-      let ts = t0 + r * (len + c.gap / 1000);
-      c.parts.forEach((p, i) => {
-        const te = ts + p.ms / 1000,
-          o = ac.createOscillator(),
-          g = ac.createGain();
-        o.setPeriodicWave(clipWave(p.harm));
-        o.frequency.setValueAtTime(p.hz[0], ts);
-        o.frequency.exponentialRampToValueAtTime(p.hz[1], te);
-        g.gain.value = 0;
-        g.gain.setValueAtTime(0, ts - 0.004);
-        g.gain.linearRampToValueAtTime(p.vol[0], ts + 0.004);
-        g.gain.linearRampToValueAtTime(p.vol[1], te);
-        g.gain.linearRampToValueAtTime(0, te + 0.008);
-        ng.gain.setValueAtTime(p.vol[0] * p.noise * 0.5, ts);
-        ng.gain.linearRampToValueAtTime(p.vol[1] * p.noise * 0.5, te);
-        o.connect(g);
-        g.connect(out);
-        o.start(ts - 0.005);
-        o.stop(te + 0.02);
-        clipNodes.push(o);
-        clipTimers.push(
-          setTimeout(
-            () => clip === c && load(c.shapes[i], { morph: true, dur: Math.max(40, p.ms * 0.8), clip: true }),
-            Math.max(0, (ts - ac.currentTime) * 1000),
-          ),
-        );
-        ts = te;
-      });
-      ng.gain.setValueAtTime(0, ts + 0.01);
-    }
-    const wait = (end - ac.currentTime) * 1000;
-    clipTimers.push(setTimeout(() => clip === c && load(c.rest, { morph: true, dur: 500, clip: true }), wait + 60));
-    clipTimers.push(setTimeout(playClip, wait + 1800));
-  }
   // iPhone: play even with the silent switch on. Safari 17+ has audioSession; older ones need a
   // looping silent <audio> playing too, which moves the page into the playback category.
   let hush = null;
@@ -1297,11 +1587,8 @@
       master.gain.setTargetAtTime(0, n, 0.05);
     }
     if (clip) {
-      clipStop();
-      if (on) {
-        mute(true);
-        playClip();
-      }
+      mute(true);
+      clipSound();
     }
   });
   // ---------- tuner ----------
@@ -1341,6 +1628,7 @@
     }
     master.warm.frequency.setTargetAtTime(cutoff(), t, 0.05);
     master.wet.gain.setTargetAtTime((tune.room / 100) * 0.8, t, 0.05);
+    if (clip && clip.g) clip.g.gain.setTargetAtTime(clipLevel(), t, 0.05);
     if ((k === "notes" || k === "all") && !clip) {
       env.gain.cancelScheduledValues(t);
       env.gain.setTargetAtTime(tune.notes === "pluck" ? SUSTAIN : 1, t, 0.05);

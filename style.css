@@ -156,6 +156,10 @@ header p {
   white-space: nowrap;
   padding-right: 4px;
 }
+.status a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
 .status:empty {
   display: none;
 }
