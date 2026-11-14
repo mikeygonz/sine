@@ -222,6 +222,7 @@
     audioUpdate();
   }
   function load(pts, opts = {}) {
+    if (!opts.clip) clipOff();
     const next = dft(pts);
     if (to && opts.morph && !RM) {
       from = { re: Float64Array.from(cre), im: Float64Array.from(cim) };
@@ -663,7 +664,7 @@
     if (ok) {
       apply(true);
       status("");
-    } else status(err === "limit" ? "too many, try later" : "couldn’t draw that");
+    } else status(err === "limit" ? "too many, try later" : live.sound ? "couldn’t make that sound" : "couldn’t draw that");
     if (!ok)
       setTimeout(() => {
         if (!live) status("");
@@ -678,6 +679,13 @@
     q.blur();
     promptStart(text);
     const id = job;
+    if (SOUNDY.test(text)) {
+      live.sound = true;
+      status("making the sound", true);
+      if (!soundOn()) snd.click();
+      hear(text, id);
+      return;
+    }
     try {
       const r = await fetch("/api/draw", {
         method: "POST",
@@ -700,6 +708,28 @@
       if (id === job) promptEnd("fail");
     }
   });
+
+  const SOUNDY = /\b(sound|sounds|noise)\b/i;
+  async function hear(text, id) {
+    try {
+      const r = await fetch("/api/sound", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: text }),
+      });
+      if (id !== job) return;
+      if (!r.ok) return promptEnd(r.status === 429 ? "limit" : "fail");
+      const v = await r.json();
+      if (id !== job) return;
+      if (!v || !Array.isArray(v.parts) || !v.parts.length) return promptEnd("fail");
+      live = null;
+      status("");
+      go.disabled = !q.value.trim();
+      startClip(v);
+    } catch (_) {
+      if (id === job) promptEnd("fail");
+    }
+  }
 
   // ---------- saved shapes ----------
   // Shapes you draw or type can be saved on this device (localStorage). Each one keeps its source
@@ -886,7 +916,7 @@
     const re = new Float32Array(HMAX + 1),
       im = new Float32Array(HMAX + 1),
       n = Math.min(N, order.length);
-    const cap = tune.overtones >= 64 ? HMAX : tune.overtones; // overtones: how many of the circles' harmonics are heard
+    const cap = clip || tune.overtones >= 64 ? HMAX : tune.overtones; // overtones: how many of the circles' harmonics are heard
     for (let i = 0; i < n; i++) {
       const j = order[i],
         f = freq(j),
@@ -982,6 +1012,10 @@
     lastPluck = -1e9;
   // x, y: the pen relative to the drawing, about -1..1, y up
   function audioPen(x, y) {
+    if (clip) {
+      if (pan) pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, x)) * 0.6, ac.currentTime, 0.05);
+      return;
+    }
     pitch = note(y);
     // plucked: every new note is struck, at most every 70ms
     const pl =
@@ -1025,6 +1059,157 @@
       v.o.stop(t0 + 0.25);
     }
     voice = { o, g };
+  }
+  let clip = null,
+    clipTimers = [],
+    clipNodes = [],
+    noiseBuf = null;
+  const phase = (h) => (h * h * 0.618 + h * 0.9) % TAU;
+  function clipShape(harm, size) {
+    const pts = new Array(M);
+    let r = 0;
+    for (let n = 0; n < M; n++) {
+      const th = (TAU * n) / M;
+      let x = 0,
+        y = 0;
+      for (let i = 0; i < harm.length; i++) {
+        const h = i + 1,
+          a = harm[i] / h ** 0.35,
+          p = phase(h);
+        x += a * Math.cos(h * th + p);
+        y += a * Math.sin(h * th + p);
+      }
+      pts[n] = [x, y];
+      r = Math.max(r, Math.hypot(x, y));
+    }
+    const k = size / (r || 1);
+    return pts.map(([x, y]) => [x * k, y * k]);
+  }
+  function startClip(v) {
+    clipOff();
+    const peak = Math.max(0.01, ...v.parts.map((p) => Math.max(p.vol[0], p.vol[1])));
+    const shapes = v.parts.map((p) => clipShape(p.harm, 0.25 + (0.75 * Math.max(p.vol[0], p.vol[1])) / peak));
+    let loud = 0;
+    v.parts.forEach((p, i) => {
+      if (Math.max(p.vol[0], p.vol[1]) > Math.max(...v.parts[loud].vol)) loud = i;
+    });
+    pick("yours");
+    if (N < DRAW_N) {
+      N = DRAW_N;
+      slider.value = String(steps.indexOf(N));
+    }
+    clip = { ...v, shapes, rest: clipShape(v.parts[loud].harm, 1) };
+    load(clip.rest, { morph: true, dur: 600, clip: true });
+    mute(true);
+    clipTimers.push(setTimeout(playClip, 650));
+  }
+  function mute(on) {
+    if (!ac || !env) return;
+    const n = ac.currentTime;
+    env.gain.cancelScheduledValues(n);
+    env.gain.setTargetAtTime(on ? 0 : tune.notes === "pluck" ? SUSTAIN : 1, n, 0.03);
+  }
+  function clipStop() {
+    clipTimers.forEach(clearTimeout);
+    clipTimers = [];
+    const n = ac ? ac.currentTime : 0;
+    for (const x of clipNodes) {
+      try {
+        if (x.gain) {
+          x.gain.cancelScheduledValues(n);
+          x.gain.setTargetAtTime(0, n, 0.01);
+        } else x.stop(n + 0.05);
+      } catch (_) {}
+    }
+    clipNodes = [];
+  }
+  function clipOff() {
+    if (!clip) return;
+    clipStop();
+    clip = null;
+    mute(false);
+  }
+  function clipWave(harm) {
+    const keep = harm
+      .map((a, i) => [a, i + 1])
+      .sort((a, b) => b[0] - a[0])
+      .slice(0, Math.max(1, Math.min(N, harm.length)));
+    const re = new Float32Array(harm.length + 1),
+      im = new Float32Array(harm.length + 1);
+    for (const [a, h] of keep) {
+      re[h] = a * Math.sin(phase(h));
+      im[h] = a * Math.cos(phase(h));
+    }
+    return ac.createPeriodicWave(re, im);
+  }
+  function playClip() {
+    if (!clip || !ac || !soundOn()) return;
+    clipStop();
+    const c = clip,
+      t0 = ac.currentTime + 0.05,
+      len = c.parts.reduce((s, p) => s + p.ms, 0) / 1000,
+      out = ac.createGain();
+    out.gain.value = 0.9;
+    out.connect(master);
+    if (!noiseBuf) {
+      noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      let s = 11;
+      for (let i = 0; i < d.length; i++) {
+        s = (s * 16807) % 2147483647;
+        d[i] = s / 1073741823.5 - 1;
+      }
+    }
+    const nz = ac.createBufferSource(),
+      bp = ac.createBiquadFilter(),
+      ng = ac.createGain();
+    nz.buffer = noiseBuf;
+    nz.loop = true;
+    bp.type = "bandpass";
+    bp.frequency.value = c.noiseHz;
+    bp.Q.value = 0.9;
+    ng.gain.value = 0;
+    nz.connect(bp);
+    bp.connect(ng);
+    ng.connect(out);
+    nz.start(t0);
+    const end = t0 + c.repeat * len + (c.repeat - 1) * (c.gap / 1000);
+    nz.stop(end + 0.1);
+    clipNodes.push(nz, ng, out);
+    for (let r = 0; r < c.repeat; r++) {
+      let ts = t0 + r * (len + c.gap / 1000);
+      c.parts.forEach((p, i) => {
+        const te = ts + p.ms / 1000,
+          o = ac.createOscillator(),
+          g = ac.createGain();
+        o.setPeriodicWave(clipWave(p.harm));
+        o.frequency.setValueAtTime(p.hz[0], ts);
+        o.frequency.exponentialRampToValueAtTime(p.hz[1], te);
+        g.gain.value = 0;
+        g.gain.setValueAtTime(0, ts - 0.004);
+        g.gain.linearRampToValueAtTime(p.vol[0], ts + 0.004);
+        g.gain.linearRampToValueAtTime(p.vol[1], te);
+        g.gain.linearRampToValueAtTime(0, te + 0.008);
+        ng.gain.setValueAtTime(p.vol[0] * p.noise * 0.5, ts);
+        ng.gain.linearRampToValueAtTime(p.vol[1] * p.noise * 0.5, te);
+        o.connect(g);
+        g.connect(out);
+        o.start(ts - 0.005);
+        o.stop(te + 0.02);
+        clipNodes.push(o);
+        clipTimers.push(
+          setTimeout(
+            () => clip === c && load(c.shapes[i], { morph: true, dur: Math.max(40, p.ms * 0.8), clip: true }),
+            Math.max(0, (ts - ac.currentTime) * 1000),
+          ),
+        );
+        ts = te;
+      });
+      ng.gain.setValueAtTime(0, ts + 0.01);
+    }
+    const wait = (end - ac.currentTime) * 1000;
+    clipTimers.push(setTimeout(() => clip === c && load(c.rest, { morph: true, dur: 500, clip: true }), wait + 60));
+    clipTimers.push(setTimeout(playClip, wait + 1800));
   }
   // iPhone: play even with the silent switch on. Safari 17+ has audioSession; older ones need a
   // looping silent <audio> playing too, which moves the page into the playback category.
@@ -1111,6 +1296,13 @@
       master.gain.cancelScheduledValues(n);
       master.gain.setTargetAtTime(0, n, 0.05);
     }
+    if (clip) {
+      clipStop();
+      if (on) {
+        mute(true);
+        playClip();
+      }
+    }
   });
   // ---------- tuner ----------
   const NOTES = ["A", "A♯", "B", "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯"];
@@ -1149,7 +1341,7 @@
     }
     master.warm.frequency.setTargetAtTime(cutoff(), t, 0.05);
     master.wet.gain.setTargetAtTime((tune.room / 100) * 0.8, t, 0.05);
-    if (k === "notes" || k === "all") {
+    if ((k === "notes" || k === "all") && !clip) {
       env.gain.cancelScheduledValues(t);
       env.gain.setTargetAtTime(tune.notes === "pluck" ? SUSTAIN : 1, t, 0.05);
     }

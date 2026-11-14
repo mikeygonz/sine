@@ -21,6 +21,10 @@ The "Draw anything" box asks a model to sketch a prompt as one line. It runs as 
 
 Every prompt spends the deployer's AI Gateway credits, so a public deploy lets anyone spend yours. To turn it off, delete `api/`. `api/draw.js` has a rough per-instance limit; for a real one, add a [Vercel Firewall](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting) rate limit on `POST /api/draw` and an AI Gateway budget on the project. The models are listed at the top of `api/draw.js`.
 
+## Hear from text (optional)
+
+Type a prompt with the word "sound" in it, like "sound of a dog barking", and `api/sound.js` asks a model for a short recipe: pitch, loudness, harmonics and noise over time. The harmonics become the shape, and the page plays the recipe through Web Audio. It uses the same AI Gateway setup and limits as the drawing box.
+
 ## Files
 
 - `index.html`, `style.css`, `app.js`: the app
