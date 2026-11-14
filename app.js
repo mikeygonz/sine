@@ -671,7 +671,7 @@
     if (ok) {
       apply(true);
       status("");
-    } else status(err === "limit" ? "too many, try later" : live.sound ? "couldn’t find that sound" : "couldn’t draw that");
+    } else status(err === "limit" ? "too many, try later" : live.sound ? "couldn’t make that sound" : "couldn’t draw that");
     if (!ok)
       setTimeout(() => {
         if (!live) status("");
@@ -688,7 +688,7 @@
     const id = job;
     if (SOUNDY.test(text)) {
       live.sound = true;
-      status("finding the sound", true);
+      status("making the sound", true);
       if (!soundOn()) snd.click();
       hear(text, id);
       return;
@@ -718,7 +718,6 @@
 
     const SYN = { H: 48, TOP: 7500, HOP: 5, SR: 16000, NZ: 0.5, AW: 6, VIS: 300, REST: 1200 };
   const phaseOf = (h) => (h * h * 0.618 + h * 0.9) % TAU;
-  const mix = (a, b, u) => a + (b - a) * u;
   function down(x, sr) {
     const r = sr / SYN.SR,
       k = Math.max(1, Math.round(r)),
@@ -885,67 +884,6 @@
     for (let r = 0; r < c.repeat; r++) for (let i = 0; i < n; i++) out[r * (n + gapN) + i] = one[i] * g;
     return out;
   }
-    function wobble(x) {
-    const i = Math.floor(x),
-      u = x - i,
-      r = (k) => {
-        const s = Math.sin(k * 127.1 + 311.7) * 43758.5453;
-        return (s - Math.floor(s)) * 2 - 1;
-      };
-    return mix(r(i), r(i + 1), u * u * (3 - 2 * u));
-  }
-  function synthAt(c, ms) {
-    const K = c.keys;
-    let i = 0;
-    while (i < K.length - 2 && ms > K[i + 1].t) i++;
-    const a = K[i],
-      b = K[i + 1] || a,
-      u = b.t > a.t ? Math.max(0, Math.min(1, (ms - a.t) / (b.t - a.t))) : 0,
-      s = ms / 1000;
-    let hz = a.hz * (b.hz / a.hz) ** u;
-    hz *= 2 ** ((c.vibrato[1] / 12) * Math.sin(TAU * c.vibrato[0] * s) + (c.jitter * 0.6 * wobble(s * 35)) / 12);
-    const vol = mix(a.vol, b.vol, u) * (1 - c.growl * 0.45 * (0.5 + 0.5 * Math.sin(TAU * 38 * s)));
-    return {
-      hz,
-      vol: Math.max(0, vol),
-      noise: mix(a.noise, b.noise, u),
-      tilt: mix(a.tilt, b.tilt, u),
-      odd: mix(a.odd, b.odd, u),
-      f: a.f.map((v, k) => mix(v, b.f[k], u)),
-    };
-  }
-  function synthAmps(st, out, keep) {
-    let e = 0;
-    for (let h = 1; h <= SYN.H; h++) {
-      const fr = h * st.hz;
-      let g = 0;
-      if (fr < SYN.TOP && (!keep || keep[h])) {
-        g = h ** -st.tilt * (h % 2 ? 1 : 1 - st.odd);
-        if (st.f.length) {
-          let fl = 0.06;
-          st.f.forEach((F, k) => {
-            const B = Math.max(90, F * 0.15);
-            fl += [1, 0.7, 0.45][k] / (1 + ((fr - F) / (B / 2)) ** 2);
-          });
-          g *= fl;
-        }
-      }
-      out[h] = g;
-      e += g * g;
-    }
-    const k = e > 0 ? (st.vol * 0.3) / Math.sqrt(e / 2) : 0;
-    for (let h = 1; h <= SYN.H; h++) out[h] *= k;
-    return out;
-  }
-  function recipeFrames(c) {
-    const len = c.keys[c.keys.length - 1].t,
-      frames = [];
-    for (let ms = 0; ms <= len + SYN.HOP; ms += SYN.HOP) {
-      const st = synthAt(c, ms);
-      frames.push({ hz: st.hz, a: synthAmps(st, new Float32Array(SYN.H + 1)), n: st.vol * st.noise * 0.3 });
-    }
-    return frames;
-  }
 
   const SOUNDY = /\b(sound|sounds|noise)\b/i;
   let clip = null;
@@ -958,30 +896,20 @@
       });
       if (id !== job) return;
       if (!r.ok) return promptEnd(r.status === 429 ? "limit" : "fail");
-      const v = await r.json();
-      let c = null;
-      if (v.recording) {
-        const b = await (await fetch(v.recording.src)).arrayBuffer();
-        let au;
-        try {
-          au = await new OfflineAudioContext(1, 1, SYN.SR).decodeAudioData(
-            b.slice(0),
-          );
-        } catch (_) {
-          au = await ac.decodeAudioData(b);
-        }
-        c = {
-          frames: analyze(au.getChannelData(0), au.sampleRate, 2500),
-          repeat: 1,
-          gap: 0,
-          credit: v.recording,
-        };
-      } else if (v.recipe)
-        c = {
-          frames: recipeFrames(v.recipe),
-          repeat: v.recipe.repeat,
-          gap: v.recipe.gap,
-        };
+      const b = await r.arrayBuffer();
+      let au;
+      try {
+        au = await new OfflineAudioContext(1, 1, SYN.SR).decodeAudioData(
+          b.slice(0),
+        );
+      } catch (_) {
+        au = await ac.decodeAudioData(b);
+      }
+      const c = {
+        frames: analyze(au.getChannelData(0), au.sampleRate, 2500),
+        repeat: 1,
+        gap: 0,
+      };
       if (id !== job) return;
       if (!c || c.frames.length < 6) return promptEnd("fail");
       live = null;
@@ -1052,19 +980,7 @@
     setOrder();
     setN();
     clearTimeout(c.redo);
-    if (c.credit) {
-      const a = document.createElement("a");
-      a.href = c.credit.page;
-      a.target = "_blank";
-      a.rel = "noopener";
-      a.textContent = "Rebuilt from a recording";
-      a.title = `${c.credit.title}, by ${c.credit.artist || "unknown"}, ${c.credit.license}, Wikimedia Commons`;
-      status("");
-      statusEl.append(a);
-    } else {
-      status("No recording found, made from scratch");
-      setTimeout(() => clip === c && status(""), 4000);
-    }
+    status("");
     mute(true);
     clipSound();
   }
@@ -1092,7 +1008,6 @@
     clipStop();
     clearTimeout(clip.redo);
     if (clip.g) clip.g.disconnect();
-    if (statusEl.querySelector("a") || clip.credit === undefined) status("");
     clip = null;
     mute(false);
     setN();

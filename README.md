@@ -23,7 +23,7 @@ Every prompt spends the deployer's AI Gateway credits, so a public deploy lets a
 
 ## Hear from text (optional)
 
-Type a prompt with the word "sound" in it, like "sound of a dog barking". `api/sound.js` looks for a short, freely licensed recording on Wikimedia Commons and a model picks the best match. The page rebuilds the loudest 2.5 seconds out of 48 harmonics of the tracked pitch plus a little noise, and the circles, shape and wave on screen are those same harmonics as they play. The recording is credited under the box. If nothing fits, a model writes a recipe for the sound instead. It uses the same AI Gateway setup and limits as the drawing box.
+Type a prompt with the word "sound" in it, like "sound of a dog barking". `api/sound.js` asks a sound effects model (`elevenlabs/sound-effects-v2` on the AI Gateway) for 2.5 seconds of new audio from the prompt, about $0.005 each. The page rebuilds it out of 48 harmonics of the tracked pitch plus a little noise, and the circles, shape and wave on screen are those same harmonics as they play. It uses the same AI Gateway setup as the drawing box, limited to 8 a minute per visitor.
 
 ## Files
 
